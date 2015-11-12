@@ -220,6 +220,7 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	Json::Value data;
 
 	string cName = "";
+	string tName = "";
 	int cCount = 0;
 	TVideoInfoEntry videoInfoEntry;
 	videoInfoEntry.lastest = INT_MIN;
@@ -246,7 +247,14 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 				videoInfoEntry.lastest = INT_MIN;
 				videoInfoEntry.oldest = INT_MAX;
 			}
+
 			videoEntry.theme		= data[1].asString();
+			if (videoEntry.theme != "") {
+				tName = videoEntry.theme;
+			}
+			else
+				 videoEntry.theme	= tName;
+
 			videoEntry.title		= data[2].asString();
 			videoEntry.duration		= duration2time(data[5].asString());
 			videoEntry.size_mb		= atoi(data[6].asCString());
