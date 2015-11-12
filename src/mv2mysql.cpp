@@ -192,7 +192,7 @@ fwrite(jsonBuf.c_str(), jsonBuf.length(), 1, f);
 fclose(f);
 /* ################################################ */
 
-	printf("done (%lu Bytes)\n", fsize); fflush(stdout);
+	printf("done (%u Bytes)\n", (uint32_t)fsize); fflush(stdout);
 
 	return true;
 }
@@ -290,7 +290,7 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	}
 	videoInfo.push_back(videoInfoEntry);
 
-	printf("done (%lu entrys)\n", videoList.size()); fflush(stdout);
+	printf("done (%u entrys)\n", (uint32_t)(videoList.size())); fflush(stdout);
 	jsonBuf.clear();
 	return true;
 }
