@@ -383,10 +383,11 @@ bool CMV2Mysql::writeMysql(bool is_fulldb)
 		}
 		delete prep_stmt;
 
-		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion) VALUES (?, ?, ?)");
+		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mventrys) VALUES (?, ?, ?, ?)");
 		prep_stmt->setString(1, DBVERSION);
 		prep_stmt->setInt(   2, time(0));
 		prep_stmt->setString(3, mvVersion);
+		prep_stmt->setInt(   4, videoList.size());
 		prep_stmt->execute();
 		delete prep_stmt;
 

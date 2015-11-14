@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `version` (
   `version` varchar(256) DEFAULT NULL,
   `vdate` int(11) DEFAULT NULL,
   `mvversion` varchar(256) DEFAULT NULL,
+  `mventrys` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 */
