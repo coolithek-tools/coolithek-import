@@ -96,6 +96,7 @@ class CMV2Mysql
 		bool createVideoDB_fromTemplate(string name);
 		inline string checkString(string& str, int size) { return str.substr(0, size); }
 		inline int checkInt(int i) { return i; }
+		uint32_t getMysqlTableSize(string db, string table);
 
 	public:
 		CMV2Mysql();

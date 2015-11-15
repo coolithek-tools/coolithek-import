@@ -336,43 +336,52 @@ bool CMV2Mysql::connectMysql()
 
 bool CMV2Mysql::writeMysql(bool is_fulldb)
 {
+	sql::Statement *stmt;
+	sql::PreparedStatement  *prep_stmt;
+	time_t startTime = time(0);
+	stmt = mysqlCon->createStatement();
+
 	if (is_fulldb) {
-		sql::Statement *stmt;
-		sql::PreparedStatement  *prep_stmt;
-		time_t startTime = time(0);
 		printf("[%s] write temporary mysql db...", progName); fflush(stdout);
-
 		createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
-		stmt = mysqlCon->createStatement();
 		stmt->execute("USE " VIDEO_DB_TMP_1";");
+	}
+	else {
+		printf("[%s] update mysql db...", progName); fflush(stdout);
+		stmt->execute("USE " VIDEO_DB";");
+	}
 
-		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VIDEO_TABLE " \
-			(channel, theme, title, duration, size_mb, description, url, website, subtitle, \
-			url_rtmp, url_small, url_rtmp_small, url_hd, url_rtmp_hd, date_unix, url_history, geo, new_entry) \
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-		for (unsigned int i = 0; i < videoList.size(); ++i) {
-			prep_stmt->setString(1,  checkString(videoList[i].channel, 256));
-			prep_stmt->setString(2,  checkString(videoList[i].theme, 256));
-			prep_stmt->setString(3,  checkString(videoList[i].title, 1024));
-			prep_stmt->setInt(   4,  checkInt(videoList[i].duration));
-			prep_stmt->setInt(   5,  checkInt(videoList[i].size_mb));
-			prep_stmt->setString(6,  checkString(videoList[i].description, 8192));
-			prep_stmt->setString(7,  checkString(videoList[i].url, 1024));
-			prep_stmt->setString(8,  checkString(videoList[i].website, 1024));
-			prep_stmt->setString(9,  checkString(videoList[i].subtitle, 1024));
-			prep_stmt->setString(10, checkString(videoList[i].url_rtmp, 1024));
-			prep_stmt->setString(11, checkString(videoList[i].url_small, 1024));
-			prep_stmt->setString(12, checkString(videoList[i].url_rtmp_small, 1024));
-			prep_stmt->setString(13, checkString(videoList[i].url_hd, 1024));
-			prep_stmt->setString(14, checkString(videoList[i].url_rtmp_hd, 1024));
-			prep_stmt->setInt(   15, checkInt(videoList[i].date_unix));
-			prep_stmt->setString(16, checkString(videoList[i].url_history, 1024));
-			prep_stmt->setString(17, checkString(videoList[i].geo, 1024));
-			prep_stmt->setString(18, checkString(videoList[i].new_entry, 1024));
-			prep_stmt->execute();
-		}
-		delete prep_stmt;
+	prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VIDEO_TABLE " \
+		(channel, theme, title, duration, size_mb, description, url, website, subtitle, \
+		url_rtmp, url_small, url_rtmp_small, url_hd, url_rtmp_hd, date_unix, url_history, geo, new_entry) \
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+	for (unsigned int i = 0; i < videoList.size(); ++i) {
+		prep_stmt->setString(1,  checkString(videoList[i].channel, 256));
+		prep_stmt->setString(2,  checkString(videoList[i].theme, 256));
+		prep_stmt->setString(3,  checkString(videoList[i].title, 1024));
+		prep_stmt->setInt(   4,  checkInt(videoList[i].duration));
+		prep_stmt->setInt(   5,  checkInt(videoList[i].size_mb));
+		prep_stmt->setString(6,  checkString(videoList[i].description, 8192));
+		prep_stmt->setString(7,  checkString(videoList[i].url, 1024));
+		prep_stmt->setString(8,  checkString(videoList[i].website, 1024));
+		prep_stmt->setString(9,  checkString(videoList[i].subtitle, 1024));
+		prep_stmt->setString(10, checkString(videoList[i].url_rtmp, 1024));
+		prep_stmt->setString(11, checkString(videoList[i].url_small, 1024));
+		prep_stmt->setString(12, checkString(videoList[i].url_rtmp_small, 1024));
+		prep_stmt->setString(13, checkString(videoList[i].url_hd, 1024));
+		prep_stmt->setString(14, checkString(videoList[i].url_rtmp_hd, 1024));
+		prep_stmt->setInt(   15, checkInt(videoList[i].date_unix));
+		prep_stmt->setString(16, checkString(videoList[i].url_history, 1024));
+		prep_stmt->setString(17, checkString(videoList[i].geo, 1024));
+		prep_stmt->setString(18, checkString(videoList[i].new_entry, 1024));
+		prep_stmt->execute();
+	}
+	delete prep_stmt;
 
+	struct stat st;
+	stat(jsondb.c_str(), &st);
+
+	if (is_fulldb) {
 		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " INFO_TABLE " (channel, count, lastest, oldest) VALUES (?, ?, ?, ?)");
 		for (unsigned int i = 0; i < videoInfo.size(); ++i) {
 			prep_stmt->setString(1, videoInfo[i].channel);
@@ -383,11 +392,12 @@ bool CMV2Mysql::writeMysql(bool is_fulldb)
 		}
 		delete prep_stmt;
 
-		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mventrys) VALUES (?, ?, ?, ?)");
+		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mvdate, mventrys) VALUES (?, ?, ?, ?, ?)");
 		prep_stmt->setString(1, DBVERSION);
 		prep_stmt->setInt(   2, time(0));
 		prep_stmt->setString(3, mvVersion);
-		prep_stmt->setInt(   4, videoList.size());
+		prep_stmt->setInt(   4, st.st_mtime);
+		prep_stmt->setInt(   5, videoList.size());
 		prep_stmt->execute();
 		delete prep_stmt;
 
@@ -406,9 +416,57 @@ bool CMV2Mysql::writeMysql(bool is_fulldb)
 		endTime = time(0);
 		printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
 	}
+	else {
+		/* Update INFO_TABLE & VERSION_TABLE */
+
+		uint32_t tmp1 = (uint32_t)time(0);
+		string vdate = to_string(tmp1);
+		tmp1 = (uint32_t)st.st_mtime;
+		string mvdate = to_string(tmp1);
+		tmp1 = getMysqlTableSize(VIDEO_DB, VIDEO_TABLE);
+		string mventrys = to_string(tmp1);
+
+		string query = "UPDATE " VERSION_TABLE \
+					" SET vdate='" + vdate + \
+					"', mvversion='" + mvVersion + "', mvdate='" + mvdate + \
+					"', mventrys='" + mventrys + "' WHERE id=1;";
+//printf("\n \nquery: %s\n \n", query.c_str());
+		prep_stmt = mysqlCon->prepareStatement(query);
+		prep_stmt->execute();
+		delete prep_stmt;
+
+		time_t endTime = time(0);
+		printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
+	}
 
 	videoList.clear();
 	return true;
+}
+
+uint32_t CMV2Mysql::getMysqlTableSize(string db, string table)
+{
+	try {
+		sql::Statement *stmt;
+		sql::ResultSet *result;
+
+		stmt = mysqlCon->createStatement();
+		stmt->execute("USE " + db + ";");
+		string query = "SELECT id FROM " + table + ";";
+		result = stmt->executeQuery(query);
+		uint32_t ret = (uint32_t)result->rowsCount();
+
+		delete result;
+		delete stmt;
+		return ret;
+
+	} catch (sql::SQLException &e) {
+		printf("\n[%s:%d] # ERR: %s (MySQL error code: %d, SQLState: %s)\n \n",
+		__func__, __LINE__, 
+		e.what(), 
+		e.getErrorCode(), 
+		e.getSQLState().c_str());
+	}
+	return 0;
 }
 
 bool CMV2Mysql::createVideoDB_fromTemplate(string name)
