@@ -1,6 +1,6 @@
 /*
 	mv2mysql - convert MediathekView db to mysql
-	Copyright (C) 2015, M. Liebmann 'micha-bbg'
+	Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'
 
 	License: GPL
 
@@ -20,8 +20,8 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.1.0"
-#define DBVERSION "1.0"
+#define PROGVERSION "0.2.0"
+#define DBVERSION "1.1"
 
 #define DEBUG_PRINT
 
@@ -44,7 +44,7 @@
 CMV2Mysql::CMV2Mysql()
 {
 	progName	= "mv2mysql";
-	progCopyright	= "Copyright (C) 2015, M. Liebmann 'micha-bbg'";
+	progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
 	progVersion	= "v"PROGVERSION;
 
 	fulldb = false;

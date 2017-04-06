@@ -1,6 +1,6 @@
 /*
 	mv2mysql - convert MediathekView db to mysql
-	Copyright (C) 2015, M. Liebmann 'micha-bbg'
+	Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'
 
 	License: GPL
 
