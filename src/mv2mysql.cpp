@@ -133,17 +133,71 @@ int CMV2Mysql::run(int argc, char *argv[])
 	if (!openDB(jsondb, fulldb))
 		return 1;
 
-	parseDB(fulldb);
-	connectMysql();
-	writeMysql(fulldb);
-
+	bool parseIO = parseDB(fulldb);
+	if (parseIO) {
+		connectMysql();
+		writeMysql(fulldb);
+	}
 
 	return 0;
 }
 
+void CMV2Mysql::convert_db(string db)
+{
+	FILE* f1 = fopen(db.c_str(), "r");
+	if (f1 == NULL) {
+		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
+		return;
+	}
+	FILE* f2 = fopen((db + ".tmp").c_str(), "w+");
+
+	printf("[%s] convert json db...", progName); fflush(stdout);
+
+	char buf[8192];
+	string line;
+	string listSearch = "\"Filmliste\":";
+	string xSearch    = "\"X\":";
+
+	int c = 32;
+	while (c != EOF) {
+		int count = 0;
+		memset(buf, 0, sizeof(buf));
+		c = 32;
+		while ((c != ',') && (c != EOF)) {
+			c = fgetc(f1);
+			if (c != EOF)
+				buf[count] = c;
+			count++;
+		}
+
+		string tmpLine;
+		line = buf;
+		size_t pos = line.find(listSearch);
+		if (pos != string::npos) {
+			tmpLine = "\n\"Filmliste\":";
+			line.replace(pos, listSearch.length(), tmpLine);
+		}
+		pos = line.find(xSearch);
+		if (pos != string::npos) {
+			tmpLine = "\n\"X\":";
+			line.replace(pos, xSearch.length(), tmpLine);
+		}
+
+		fputs(line.c_str(), f2);
+	}
+
+	fclose(f1);
+	fputs("\n", f2);
+	fclose(f2);
+
+	printf("done.\n"); fflush(stdout);
+}
+
 bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 {
-	FILE* f = fopen(db.c_str(), "r");
+	convert_db(db);
+
+	FILE* f = fopen((db + ".tmp").c_str(), "r");
 	if (f == NULL) {
 		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
 		return false;
@@ -154,7 +208,7 @@ bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 	size_t fsize = ftell(f);
 	fseek(f, 0, SEEK_SET);
 	jsonBuf = "";
-	char buf[8192];
+	char buf[0xFFFF];
 	string line;
 	string listSearch = "\"Filmliste\"";
 	string xSearch    = "\"X\"";
@@ -177,20 +231,22 @@ bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 			line.replace(pos, 1, "]}");
 			count++;
 		}
-		if (line == "{")
-			line = "[";
-		if (line == "}")
-			line = "]";
 		jsonBuf += line + "\n";
 	}	
+	size_t lPos = jsonBuf.find_first_of("{");
+	jsonBuf.replace(lPos, 1, "[");
+	lPos = jsonBuf.find_last_of("}");
+	jsonBuf.replace(lPos, 1, "\n]");
 
 	fclose(f);
 
+#if 1
 /* ################################################ */
 f = fopen((db + ".xxx").c_str(), "w+");
 fwrite(jsonBuf.c_str(), jsonBuf.length(), 1, f);
 fclose(f);
 /* ################################################ */
+#endif
 
 	printf("done (%u Bytes)\n", (uint32_t)fsize); fflush(stdout);
 
@@ -204,16 +260,10 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	Json::Value root;
 	Json::Reader reader;
 
-	string answer;
-
-	bool parsedSuccess = reader.parse(jsonBuf, root, false);
-
-	if(!parsedSuccess)
-		parsedSuccess = reader.parse(answer, root, false);
-
+	bool parsedSuccess = reader.parse(jsonBuf, root, true);
 	if(!parsedSuccess) {
 		printf("\nFailed to parse JSON\n");
-		printf("%s\n", reader.getFormattedErrorMessages().c_str());
+		printf("[%s:%d] %s\n", __func__, __LINE__, reader.getFormattedErrorMessages().c_str());
 		return false;
 	}
 
@@ -225,6 +275,8 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	TVideoInfoEntry videoInfoEntry;
 	videoInfoEntry.lastest = INT_MIN;
 	videoInfoEntry.oldest = INT_MAX;
+	time_t nowTime = time(NULL);
+	int days = 1000;
 	for (unsigned int i = 0; i < root.size(); ++i) {
 
 		if (i == 0) {		/* head 1 */
@@ -272,6 +324,24 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 			if ((videoEntry.date_unix == 0) && (data[3].asString() != "") && (data[4].asString() != "")) {
 				videoEntry.date_unix = str2time("%d.%m.%Y %H:%M:%S", data[3].asString() + " " + data[4].asString());
 			}
+			/*
+			## Example: ##
+			full		166107 entrys
+			  1 day		  1893 entrys
+			  7 days	  9323 entrys
+			 14 days	 14844 entrys
+			 31 days	 23262 entrys
+			 60 days	 35565 entrys
+			 90 days	 47236 entrys
+			120 days	 56320 entrys
+			180 days	 77016 entrys
+			*/
+			if (videoEntry.date_unix > 0) {
+				days = 180;
+				time_t maxDiff = (24*3600) * days; /* Not older than 180 days */
+				if (videoEntry.date_unix < (nowTime - maxDiff))
+					continue;
+			}
 
 			videoEntry.url_history		= data[17].asString();
 			videoEntry.geo			= data[18].asString();
@@ -290,8 +360,14 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	}
 	videoInfo.push_back(videoInfoEntry);
 
-	printf("done (%u entrys)\n", (uint32_t)(videoList.size())); fflush(stdout);
+	printf("done (%u (%d days) / %u entrys)\n", (uint32_t)(videoList.size()), days, (uint32_t)(root.size()-2)); fflush(stdout);
 	jsonBuf.clear();
+
+	if (videoList.size() < 1000) {
+		printf("[%s] Video list too small (%d entrys), no transfer to the database.", progName, (uint32_t)(videoList.size())); fflush(stdout);
+		return false;
+	}
+
 	return true;
 }
 

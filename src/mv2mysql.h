@@ -87,6 +87,7 @@ class CMV2Mysql
 		void printHeader();
 		void printCopyright();
 		void printHelp();
+		void convert_db(string db);
 		bool openDB(string db, bool is_fulldb);
 		bool parseDB(bool is_fulldb);
 		string convertUrl(string url1, string url2);
