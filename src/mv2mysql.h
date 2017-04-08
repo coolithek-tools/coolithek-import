@@ -75,6 +75,7 @@ class CMV2Mysql
 		bool diffdb;
 		string jsondb;
 		string jsonBuf;
+		int epoch;
 
 		string mvVersion;
 
@@ -87,9 +88,9 @@ class CMV2Mysql
 		void printHeader();
 		void printCopyright();
 		void printHelp();
-		void convert_db(string db);
+		void convertDB(string db);
 		bool openDB(string db, bool is_fulldb);
-		bool parseDB(bool is_fulldb);
+		bool parseDB(string db, bool is_fulldb);
 		string convertUrl(string url1, string url2);
 
 		bool connectMysql();

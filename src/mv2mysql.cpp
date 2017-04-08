@@ -36,10 +36,14 @@
 #include <mysql_error.h>
 
 #include <iostream>
+#include <fstream>
 #include <climits>
 
 #include "mv2mysql.h"
 #include "helpers.h"
+
+#define DB_1 "-1.json"
+#define DB_2 "-2.json"
 
 CMV2Mysql::CMV2Mysql()
 {
@@ -49,12 +53,15 @@ CMV2Mysql::CMV2Mysql()
 
 	fulldb = false;
 	diffdb = false;
+	epoch  = 180; /* 1/2 year*/
 
 	mysqlCon = NULL;
 }
 
 CMV2Mysql::~CMV2Mysql()
 {
+	videoList.clear();
+	videoInfo.clear();
 	if (mysqlCon != NULL)
 		delete mysqlCon;
 }
@@ -81,6 +88,9 @@ void CMV2Mysql::printHelp()
 {
 	printHeader();
 	printCopyright();
+	printf("	-f | --file	  => Json file to parse\n");
+	printf("	-e | --epoch	  => Use not older entrys than 'epoch' days\n");
+	printf("			     (default 180 days)\n");
 	printf("	-h | --help	  => Display this help screen and exit\n");
 	printf("	-v | --version	  => Display versions info and exit\n");
 }
@@ -98,12 +108,13 @@ int CMV2Mysql::run(int argc, char *argv[])
 	static struct option long_options[] = {
 		{"help",	noParam,       NULL, 'h'},
 		{"version",	noParam,       NULL, 'v'},
-		{"fulldb",	requiredParam, NULL, 'f'},
-		{"diffdb",	requiredParam, NULL, 'd'},
+		{"file",	requiredParam, NULL, 'f'},
+		{"diffdb",	requiredParam, NULL, 'd'}, /* not used */
+		{"epoch",	requiredParam, NULL, 'e'},
 		{NULL,		0, NULL, 0}
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "h?vf:d:", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "h?vf:d:e:", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'h':
 			case '?':
@@ -119,11 +130,14 @@ int CMV2Mysql::run(int argc, char *argv[])
 					jsondb = string(optarg);
 				}
 				break;
-			case 'd': 
+			case 'd':
 				if (fulldb == false) {
 					diffdb = true;
 					jsondb = string(optarg);
 				}
+				break;
+			case 'e':
+				epoch = atoi(optarg);
 				break;
 			default:
 				break;
@@ -133,7 +147,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 	if (!openDB(jsondb, fulldb))
 		return 1;
 
-	bool parseIO = parseDB(fulldb);
+	bool parseIO = parseDB(jsondb, fulldb);
 	if (parseIO) {
 		connectMysql();
 		writeMysql(fulldb);
@@ -142,14 +156,14 @@ int CMV2Mysql::run(int argc, char *argv[])
 	return 0;
 }
 
-void CMV2Mysql::convert_db(string db)
+void CMV2Mysql::convertDB(string db)
 {
 	FILE* f1 = fopen(db.c_str(), "r");
 	if (f1 == NULL) {
 		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
 		return;
 	}
-	FILE* f2 = fopen((db + ".tmp").c_str(), "w+");
+	FILE* f2 = fopen((db + DB_1).c_str(), "w+");
 
 	printf("[%s] convert json db...", progName); fflush(stdout);
 
@@ -195,9 +209,9 @@ void CMV2Mysql::convert_db(string db)
 
 bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 {
-	convert_db(db);
+	convertDB(db);
 
-	FILE* f = fopen((db + ".tmp").c_str(), "r");
+	FILE* f = fopen((db + DB_1).c_str(), "r");
 	if (f == NULL) {
 		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
 		return false;
@@ -240,27 +254,33 @@ bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 
 	fclose(f);
 
-#if 1
-/* ################################################ */
-f = fopen((db + ".xxx").c_str(), "w+");
-fwrite(jsonBuf.c_str(), jsonBuf.length(), 1, f);
-fclose(f);
-/* ################################################ */
-#endif
+	f = fopen((db + DB_2).c_str(), "w+");
+	fwrite(jsonBuf.c_str(), jsonBuf.length(), 1, f);
+	fclose(f);
+	jsonBuf.clear();
 
 	printf("done (%u Bytes)\n", (uint32_t)fsize); fflush(stdout);
 
 	return true;
 }
 
-bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
+bool CMV2Mysql::parseDB(string db, bool /*is_fulldb*/)
 {
 	printf("[%s] parse json db...", progName); fflush(stdout);
 
 	Json::Value root;
 	Json::Reader reader;
+	bool parsedSuccess = false;
 
-	bool parsedSuccess = reader.parse(jsonBuf, root, true);
+	ifstream jsonData((db + DB_2).c_str(), ifstream::binary);
+	if (!jsonData.is_open()) {
+		printf("\n[%s:%d] Failed to open json db %s\n", __func__, __LINE__, (db + DB_2).c_str());
+		return false;
+	}
+
+	parsedSuccess = reader.parse(jsonData, root, false);
+	jsonData.close();
+
 	if(!parsedSuccess) {
 		printf("\nFailed to parse JSON\n");
 		printf("[%s:%d] %s\n", __func__, __LINE__, reader.getFormattedErrorMessages().c_str());
@@ -276,7 +296,6 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	videoInfoEntry.lastest = INT_MIN;
 	videoInfoEntry.oldest = INT_MAX;
 	time_t nowTime = time(NULL);
-	int days = 1000;
 	for (unsigned int i = 0; i < root.size(); ++i) {
 
 		if (i == 0) {		/* head 1 */
@@ -337,8 +356,7 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 			180 days	 77016 entrys
 			*/
 			if (videoEntry.date_unix > 0) {
-				days = 180;
-				time_t maxDiff = (24*3600) * days; /* Not older than 180 days */
+				time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default 180) */
 				if (videoEntry.date_unix < (nowTime - maxDiff))
 					continue;
 			}
@@ -360,11 +378,10 @@ bool CMV2Mysql::parseDB(bool /*is_fulldb*/)
 	}
 	videoInfo.push_back(videoInfoEntry);
 
-	printf("done (%u (%d days) / %u entrys)\n", (uint32_t)(videoList.size()), days, (uint32_t)(root.size()-2)); fflush(stdout);
-	jsonBuf.clear();
+	printf("done (%u (%d days) / %u entrys)\n", (uint32_t)(videoList.size()), epoch, (uint32_t)(root.size()-2)); fflush(stdout);
 
 	if (videoList.size() < 1000) {
-		printf("[%s] Video list too small (%d entrys), no transfer to the database.", progName, (uint32_t)(videoList.size())); fflush(stdout);
+		printf("[%s] Video list too small (%d entrys), no transfer to the database.\n", progName, (uint32_t)(videoList.size())); fflush(stdout);
 		return false;
 	}
 
@@ -516,6 +533,7 @@ bool CMV2Mysql::writeMysql(bool is_fulldb)
 	}
 
 	videoList.clear();
+	videoInfo.clear();
 	return true;
 }
 
