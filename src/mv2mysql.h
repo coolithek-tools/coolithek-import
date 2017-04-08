@@ -71,8 +71,6 @@ class CMV2Mysql
 		const char* progCopyright;
 		const char* progVersion;
 
-		bool fulldb;
-		bool diffdb;
 		string jsondb;
 		string jsonBuf;
 		int epoch;
@@ -89,12 +87,12 @@ class CMV2Mysql
 		void printCopyright();
 		void printHelp();
 		void convertDB(string db);
-		bool openDB(string db, bool is_fulldb);
-		bool parseDB(string db, bool is_fulldb);
+		bool openDB(string db);
+		bool parseDB(string db);
 		string convertUrl(string url1, string url2);
 
 		bool connectMysql();
-		bool writeMysql(bool is_fulldb);
+		bool writeMysql();
 		bool createVideoDB_fromTemplate(string name);
 		inline string checkString(string& str, int size) { return str.substr(0, size); }
 		inline int checkInt(int i) { return i; }

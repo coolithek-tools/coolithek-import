@@ -51,8 +51,6 @@ CMV2Mysql::CMV2Mysql()
 	progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
 	progVersion	= "v"PROGVERSION;
 
-	fulldb = false;
-	diffdb = false;
 	epoch  = 180; /* 1/2 year*/
 
 	mysqlCon = NULL;
@@ -109,7 +107,6 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"help",	noParam,       NULL, 'h'},
 		{"version",	noParam,       NULL, 'v'},
 		{"file",	requiredParam, NULL, 'f'},
-		{"diffdb",	requiredParam, NULL, 'd'}, /* not used */
 		{"epoch",	requiredParam, NULL, 'e'},
 		{NULL,		0, NULL, 0}
 	};
@@ -125,16 +122,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 				printCopyright();
 				return 0;
 			case 'f':
-				if (diffdb == false) {
-					fulldb = true;
-					jsondb = string(optarg);
-				}
-				break;
-			case 'd':
-				if (fulldb == false) {
-					diffdb = true;
-					jsondb = string(optarg);
-				}
+				jsondb = string(optarg);
 				break;
 			case 'e':
 				epoch = atoi(optarg);
@@ -144,13 +132,13 @@ int CMV2Mysql::run(int argc, char *argv[])
 		}
 	}
 
-	if (!openDB(jsondb, fulldb))
+	if (!openDB(jsondb))
 		return 1;
 
-	bool parseIO = parseDB(jsondb, fulldb);
+	bool parseIO = parseDB(jsondb);
 	if (parseIO) {
 		connectMysql();
-		writeMysql(fulldb);
+		writeMysql();
 	}
 
 	return 0;
@@ -207,7 +195,7 @@ void CMV2Mysql::convertDB(string db)
 	printf("done.\n"); fflush(stdout);
 }
 
-bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
+bool CMV2Mysql::openDB(string db)
 {
 	convertDB(db);
 
@@ -264,7 +252,7 @@ bool CMV2Mysql::openDB(string db, bool /*is_fulldb*/)
 	return true;
 }
 
-bool CMV2Mysql::parseDB(string db, bool /*is_fulldb*/)
+bool CMV2Mysql::parseDB(string db)
 {
 	printf("[%s] parse json db...", progName); fflush(stdout);
 
@@ -427,22 +415,16 @@ bool CMV2Mysql::connectMysql()
 	return true;
 }
 
-bool CMV2Mysql::writeMysql(bool is_fulldb)
+bool CMV2Mysql::writeMysql()
 {
 	sql::Statement *stmt;
 	sql::PreparedStatement  *prep_stmt;
 	time_t startTime = time(0);
 	stmt = mysqlCon->createStatement();
 
-	if (is_fulldb) {
-		printf("[%s] write temporary mysql db...", progName); fflush(stdout);
-		createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
-		stmt->execute("USE " VIDEO_DB_TMP_1";");
-	}
-	else {
-		printf("[%s] update mysql db...", progName); fflush(stdout);
-		stmt->execute("USE " VIDEO_DB";");
-	}
+	printf("[%s] write temporary mysql db...", progName); fflush(stdout);
+	createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
+	stmt->execute("USE " VIDEO_DB_TMP_1";");
 
 	prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VIDEO_TABLE " \
 		(channel, theme, title, duration, size_mb, description, url, website, subtitle, \
@@ -474,63 +456,39 @@ bool CMV2Mysql::writeMysql(bool is_fulldb)
 	struct stat st;
 	stat(jsondb.c_str(), &st);
 
-	if (is_fulldb) {
-		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " INFO_TABLE " (channel, count, lastest, oldest) VALUES (?, ?, ?, ?)");
-		for (unsigned int i = 0; i < videoInfo.size(); ++i) {
-			prep_stmt->setString(1, videoInfo[i].channel);
-			prep_stmt->setInt(   2, videoInfo[i].count);
-			prep_stmt->setInt(   3, videoInfo[i].lastest);
-			prep_stmt->setInt(   4, videoInfo[i].oldest);
-			prep_stmt->execute();
-		}
-		delete prep_stmt;
-
-		prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mvdate, mventrys) VALUES (?, ?, ?, ?, ?)");
-		prep_stmt->setString(1, DBVERSION);
-		prep_stmt->setInt(   2, time(0));
-		prep_stmt->setString(3, mvVersion);
-		prep_stmt->setInt(   4, st.st_mtime);
-		prep_stmt->setInt(   5, videoList.size());
+	prep_stmt = mysqlCon->prepareStatement("INSERT INTO " INFO_TABLE " (channel, count, lastest, oldest) VALUES (?, ?, ?, ?)");
+	for (unsigned int i = 0; i < videoInfo.size(); ++i) {
+		prep_stmt->setString(1, videoInfo[i].channel);
+		prep_stmt->setInt(   2, videoInfo[i].count);
+		prep_stmt->setInt(   3, videoInfo[i].lastest);
+		prep_stmt->setInt(   4, videoInfo[i].oldest);
 		prep_stmt->execute();
-		delete prep_stmt;
-
-		time_t endTime = time(0);
-		printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
-		startTime = time(0);
-		printf("[%s] copy mysql db...", progName); fflush(stdout);
-
-		createVideoDB_fromTemplate(VIDEO_DB);
-		stmt->execute("USE " VIDEO_DB";");
-		stmt->execute("INSERT INTO "VIDEO_DB"."VIDEO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VIDEO_TABLE";");
-		stmt->execute("INSERT INTO "VIDEO_DB"."INFO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."INFO_TABLE";");
-		stmt->execute("INSERT INTO "VIDEO_DB"."VERSION_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VERSION_TABLE";");
-
-		delete stmt;
-		endTime = time(0);
-		printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
 	}
-	else {
-		/* Update INFO_TABLE & VERSION_TABLE */
+	delete prep_stmt;
 
-		uint32_t tmp1 = (uint32_t)time(0);
-		string vdate = to_string(tmp1);
-		tmp1 = (uint32_t)st.st_mtime;
-		string mvdate = to_string(tmp1);
-		tmp1 = getMysqlTableSize(VIDEO_DB, VIDEO_TABLE);
-		string mventrys = to_string(tmp1);
+	prep_stmt = mysqlCon->prepareStatement("INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mvdate, mventrys) VALUES (?, ?, ?, ?, ?)");
+	prep_stmt->setString(1, DBVERSION);
+	prep_stmt->setInt(   2, time(0));
+	prep_stmt->setString(3, mvVersion);
+	prep_stmt->setInt(   4, st.st_mtime);
+	prep_stmt->setInt(   5, videoList.size());
+	prep_stmt->execute();
+	delete prep_stmt;
 
-		string query = "UPDATE " VERSION_TABLE \
-					" SET vdate='" + vdate + \
-					"', mvversion='" + mvVersion + "', mvdate='" + mvdate + \
-					"', mventrys='" + mventrys + "' WHERE id=1;";
-//printf("\n \nquery: %s\n \n", query.c_str());
-		prep_stmt = mysqlCon->prepareStatement(query);
-		prep_stmt->execute();
-		delete prep_stmt;
+	time_t endTime = time(0);
+	printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
+	startTime = time(0);
+	printf("[%s] copy mysql db...", progName); fflush(stdout);
 
-		time_t endTime = time(0);
-		printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
-	}
+	createVideoDB_fromTemplate(VIDEO_DB);
+	stmt->execute("USE " VIDEO_DB";");
+	stmt->execute("INSERT INTO "VIDEO_DB"."VIDEO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VIDEO_TABLE";");
+	stmt->execute("INSERT INTO "VIDEO_DB"."INFO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."INFO_TABLE";");
+	stmt->execute("INSERT INTO "VIDEO_DB"."VERSION_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VERSION_TABLE";");
+
+	delete stmt;
+	endTime = time(0);
+	printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
 
 	videoList.clear();
 	videoInfo.clear();
