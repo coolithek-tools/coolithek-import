@@ -410,7 +410,7 @@ bool CMV2Mysql::connectMysql()
 	vector<string> v = split(pw, ':');
 
 	mysqlDriver = sql::mysql::get_mysql_driver_instance();
-	mysqlCon = mysqlDriver->connect("tcp://localhost:3306", v[0].c_str(), v[1].c_str());
+	mysqlCon = mysqlDriver->connect("tcp://127.0.0.1:3306", v[0].c_str(), v[1].c_str());
 
 	return true;
 }
