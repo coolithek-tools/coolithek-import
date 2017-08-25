@@ -1,42 +1,42 @@
 ###
-###  Makefile mv2mysql
+###  Makefile mv2mariadb
 ###
 
-DEBUG = 1
+##DEBUG = 1
 
 CC	 = g++
 STRIP	 = strip
 
-INCLUDES =
+INCLUDES = -I/usr/include/mariadb
 ifeq ($(DEBUG), 1)
-CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -Wl,-O1 -pipe -g -ggdb3 -fno-strict-aliasing
+CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -Wl,-O0 -pipe -g -ggdb3 -fno-strict-aliasing
 else
 CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -Wl,-O3 -pipe -fno-strict-aliasing
 endif
 CFLAGS   += -fmax-errors=10
 
-LIBS     = -lstdc++ -ljsoncpp -lmysqlcppconn
+LIBS     = -lstdc++ -ljsoncpp -lmariadb
 LDFLAGS  = $(LIBS)
-DESTDIR  = /usr
+DESTDIR  = /usr/local
 
 ifeq ($(DEBUG), 1)
-all: clean mv2mysql
+all: clean mv2mariadb
 else
-all: clean mv2mysql strip
+all: clean mv2mariadb strip
 endif
 
 PROG_SOURCES = \
-	src/mv2mysql.cpp \
+	src/mv2mariadb.cpp \
 	src/helpers.cpp
 
-mv2mysql: $(PROG_SOURCES)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(PROG_SOURCES) -o mv2mysql
+mv2mariadb: $(PROG_SOURCES)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(PROG_SOURCES) -o mv2mariadb
 
 install:
-	install -m 755 -D mv2mysql $(DESTDIR)/bin/mv2mysql
+	install -m 755 -D mv2mariadb $(DESTDIR)/bin/mv2mariadb
 
 clean:
-	rm -f mv2mysql
+	rm -f mv2mariadb
 
 strip:
-	$(STRIP) mv2mysql
+	$(STRIP) mv2mariadb

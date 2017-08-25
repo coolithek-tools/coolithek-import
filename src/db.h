@@ -2,16 +2,23 @@
 #ifndef __MV2MYSQL_DB_H__
 #define __MV2MYSQL_DB_H__
 
+/*
 #include "mysql_connection.h"
 #include <cppconn/driver.h>
 #include <cppconn/exception.h>
 #include <cppconn/resultset.h>
 #include <cppconn/statement.h>
 #include <cppconn/prepared_statement.h>
+*/
 
-#define VIDEO_DB "mediathek_1"
-#define VIDEO_DB_TMP_1 VIDEO_DB"_tmp_1"
-#define VIDEO_DB_TEMPLATE VIDEO_DB"_template"
+//#define TEST_PREFIX
+#define TEST_PREFIX "_TEST"
+
+#define VIDEO_DB_X "mediathek_1"
+
+#define VIDEO_DB VIDEO_DB_X TEST_PREFIX
+#define VIDEO_DB_TMP_1 VIDEO_DB_X "_tmp_1" TEST_PREFIX
+#define VIDEO_DB_TEMPLATE VIDEO_DB_X "_template"
 
 #define VIDEO_TABLE "video"
 #define INFO_TABLE "channelinfo"

@@ -1,5 +1,5 @@
 /*
-	mv2mysql - convert MediathekView db to mysql
+	mv2mariadb - convert MediathekView db to mariadb
 	Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'
 
 	License: GPL
@@ -25,12 +25,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 
 #include <string>
 
+#include <mysql.h>
+
 #include "db.h"
+#include "helpers.h"
 
 using namespace std;
 
@@ -74,14 +78,16 @@ class CMV2Mysql
 		string jsondb;
 		string jsonBuf;
 		int epoch;
+		bool epochStd;
+		bool debugPrint;
+		string sqlUser;
+		string sqlPW;
 
 		string mvVersion;
 
-		vector<TVideoEntry> videoList;
 		vector<TVideoInfoEntry> videoInfo;
 
-		sql::Connection *mysqlCon;
-		sql::mysql::MySQL_Driver *mysqlDriver;
+		MYSQL *mysqlCon;
 
 		void printHeader();
 		void printCopyright();
@@ -91,12 +97,24 @@ class CMV2Mysql
 		bool parseDB(string db);
 		string convertUrl(string url1, string url2);
 
+		void show_error();
 		bool connectMysql();
-		bool writeMysql();
+		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
+		string createInfoTableQuery(int size);
+		bool copyDB();
+		bool executeMultiQueryString(string query);
 		bool createVideoDB_fromTemplate(string name);
-		inline string checkString(string& str, int size) { return str.substr(0, size); }
-		inline int checkInt(int i) { return i; }
-		uint32_t getMysqlTableSize(string db, string table);
+		char checkStringBuff[0xFFFF];
+		inline string checkString(string& str, int size) {
+			size_t size_ = ((size_t)size > (sizeof(checkStringBuff)-1)) ? sizeof(checkStringBuff)-1 : size;
+			string str2 = (str.length() > size_) ? str.substr(0, size_) : str;
+//			memset(checkStringBuff, 0, sizeof(checkStringBuff));
+			memset(checkStringBuff, 0, size_+1);
+			mysql_real_escape_string(mysqlCon, checkStringBuff, str2.c_str(), str2.length());
+			str = (string)checkStringBuff;
+			return "'" + str + "'";
+		}
+		inline string checkInt(int i) { return to_string(i); }
 
 	public:
 		CMV2Mysql();
