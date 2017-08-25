@@ -23,8 +23,6 @@
 #define PROGVERSION "0.3.0"
 #define DBVERSION "3.0"
 
-//#define DEBUG_PRINT
-
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -60,8 +58,9 @@ CMV2Mysql::CMV2Mysql()
 CMV2Mysql::~CMV2Mysql()
 {
 	videoInfo.clear();
-	if (mysqlCon != NULL)
+	if (mysqlCon != NULL) {
 		mysql_close(mysqlCon);
+	}
 }
 
 CMV2Mysql* CMV2Mysql::getInstance()
@@ -297,24 +296,13 @@ bool CMV2Mysql::parseDB(string db)
 	string vMultiQuery = "";
 	string vQuery = "";
 	uint32_t writeLen = 0;
-	uint32_t writeLenTmp = 0;
 	bool writeStart = true;
 
-	string sqlName = jsondb + ".sql";
-	FILE* f2 = fopen(sqlName.c_str(), "w+");
-
-	string tmpStr1 = (string)(VIDEO_DB_TMP_1);
-	string tmpStr2 = "USE " + tmpStr1 + ";\n";
-	fwrite(tmpStr2.c_str(), tmpStr2.length(), 1, f2);
-
-	tmpStr2 = "SET NAMES 'utf8';\n";
-//	tmpStr2 = "SET CHARACTER SET 'utf8';\n";
-	fwrite(tmpStr2.c_str(), tmpStr2.length(), 1, f2);
-
-	tmpStr2 = "LOCK TABLES " VIDEO_TABLE " WRITE;\n";
-	fwrite(tmpStr2.c_str(), tmpStr2.length(), 1, f2);
-
 	createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
+
+	string sqlBuff = "";
+	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
+		show_error();
 
 	gettimeofday(&t1, NULL);
 	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
@@ -400,56 +388,54 @@ bool CMV2Mysql::parseDB(string db)
 			vQuery = createVideoTableQuery(entrys, writeStart, &videoEntry);
 			writeStart = false;
 
-			uint32_t maxWriteLen = 524288;		/* 512k */
-//			uint32_t maxWriteLen = 1048576;		/* 1M */
+			uint32_t maxWriteLen = 1048576;		/* 1MB */
 			if ((writeLen + vQuery.length()) >= maxWriteLen) {
-				string writeBuff = ";\n";
-				writeLenTmp += fwrite(writeBuff.c_str(), writeBuff.length(), 1, f2);
-				writeLen += writeLenTmp * writeBuff.length();
+				sqlBuff += ";\n";
+				if (mysql_real_query(mysqlCon, sqlBuff.c_str(), sqlBuff.length()) != 0)
+					show_error();
 				vQuery = createVideoTableQuery(entrys, true, &videoEntry);
+				sqlBuff = "";
 				writeLen = 0;
 			}
-
-			writeLenTmp = fwrite(vQuery.c_str(), vQuery.length(), 1, f2);
-			writeLen += writeLenTmp * vQuery.length();
+			sqlBuff += vQuery;
+			writeLen = sqlBuff.length();
 		}
 	}
-	tmpStr2 = ";\nUNLOCK TABLES;\n";
-	fwrite(tmpStr2.c_str(), tmpStr2.length(), 1, f2);
-	tmpStr2 = "COMMIT;\n";
-	fwrite(tmpStr2.c_str(), tmpStr2.length(), 1, f2);
-	fclose(f2);
 
+	if (!sqlBuff.empty()) {
+		if (mysql_real_query(mysqlCon, sqlBuff.c_str(), sqlBuff.length()) != 0)
+			show_error();
+		sqlBuff.clear();
+	}
+	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
+		show_error();
 	if (debugPrint) {
 		printf("\e[?25h"); /* cursor on */
 		printf("\n");
 	}
 
-	system(("./toMariaDB.sh " + sqlName + " " + progName + " " + sqlUser + " " + sqlPW).c_str());
-
-	printf("[%s] ...done (%u (%d %s) / %u entrys)\n", progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2)); fflush(stdout);
-	gettimeofday(&t1, NULL);
-	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-#if 0
-	int32_t workTime = (int32_t)((workDTms - nowDTms) / 1000);
-	int32_t entryTime_ms = (int32_t)((workDTms - nowDTms) / entrys);
-	printf("[%s] duration: %d sec (%d msec/entry)\n", progName, workTime, entryTime_ms);
-#else
-	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
-	int32_t workTime = (int32_t)((workDTms - nowDTms) / 1000);
-	int32_t entryTime_us = (int32_t)((workDTus - nowDTms*1000) / entrys);
-	printf("[%s] duration: %d sec (%d µsec/entry)\n", progName, workTime, entryTime_us);
-#endif
 	videoInfo.push_back(videoInfoEntry);
 	string itq = createInfoTableQuery(entrys);
 	executeMultiQueryString(itq);
 
+	if (!debugPrint)
+		printf("\n");
+
 	if (entrys < 1000) {
-		printf("[%s] Video list too small (%d entrys), no transfer to the database.\n", progName, entrys); fflush(stdout);
+		printf("\n[%s] Video list too small (%d entrys), no transfer to the database.\n", progName, entrys); fflush(stdout);
 		return false;
 	}
 
 	copyDB();
+
+	printf("[%s] done (%u (%d %s) / %u entrys)\n", progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
+	int32_t workTime = (int32_t)((workDTms - nowDTms) / 1000);
+	double entryTime_us = (workDTus - nowDTms*1000) / entrys;
+	printf("[%s] duration: %d sec (%.03f msec/entry)\n", progName, workTime, entryTime_us/1000);
+	fflush(stdout);
 
 	return true;
 }
@@ -500,6 +486,13 @@ bool CMV2Mysql::connectMysql()
 	sqlPW   = v[1];
 
 	mysqlCon = mysql_init(NULL);
+
+	int maxAllowedPacketDef = 4194304;			// default
+	int maxAllowedPacket = maxAllowedPacketDef*64;
+//	int maxAllowedPacket = maxAllowedPacketDef*256;		// max value
+	if (mysql_optionsv(mysqlCon, MYSQL_OPT_MAX_ALLOWED_PACKET, (const void*)(&maxAllowedPacket)) != 0)
+		show_error();
+
 	unsigned long flags = 0;
 	flags |= CLIENT_MULTI_STATEMENTS;
 //	flags |= CLIENT_COMPRESS;
@@ -508,26 +501,13 @@ bool CMV2Mysql::connectMysql()
 
 	if (mysql_set_character_set(mysqlCon, "utf8") != 0)
 		show_error();
-#if 0
-	int netBufferLengthDef = 16384;				// default
-	int netBufferLength = netBufferLengthDef*16;
-//	int netBufferLength = netBufferLengthDef*64;		// max value
 
-	int maxAllowedPacketDef = 4194304;			// default
-	int maxAllowedPacket = maxAllowedPacketDef*16;
-//	int maxAllowedPacket = maxAllowedPacketDef*256;		// max value
-
-	if (mysql_optionsv(mysqlCon, MYSQL_OPT_NET_BUFFER_LENGTH,  (const void*)(&netBufferLength),
-				     MYSQL_OPT_MAX_ALLOWED_PACKET, (const void*)(&maxAllowedPacket)) != 0)
-		show_error();
-#endif
 	return true;
 }
 
 bool CMV2Mysql::executeMultiQueryString(string query)
 {
 	int status = mysql_real_query(mysqlCon, query.c_str(), query.length());
-//	int status = mysql_query(mysqlCon, query.c_str());
 	if (status)
 		show_error();
 	
