@@ -31,9 +31,6 @@
 
 #include <string>
 
-#include <mysql.h>
-
-#include "db.h"
 #include "helpers.h"
 #include "configfile.h"
 
@@ -83,38 +80,22 @@ struct GSettings
 	bool   testMode;
 };
 
+class CSql;
+
 class CMV2Mysql
 {
 	private:
-		GSettings g_settings;
-		const char* progName;
-		const char* progCopyright;
-		const char* progVersion;
+		bool multiQuery;
+		CSql* csql;
 
 		string jsondb;
 		string jsonBuf;
 		int epoch;
 		bool epochStd;
-		bool debugPrint;
-		bool multiQuery;
-		string sqlUser;
-		string sqlPW;
 		string configFileName;
-		string templateDBFile;
 		CConfigFile configFile;
 
-		string mvVersion;
-
-		vector<TVideoInfoEntry> videoInfo;
-
-		MYSQL *mysqlCon;
-
-		string VIDEO_DB;
 		string VIDEO_DB_TMP_1;
-		string VIDEO_DB_TEMPLATE;
-		string VIDEO_TABLE;
-		string INFO_TABLE;
-		string VERSION_TABLE;
 
 		void printHeader();
 		void printCopyright();
@@ -126,28 +107,6 @@ class CMV2Mysql
 
 		int loadSetup(string fname);
 		void saveSetup(string fname);
-
-		void show_error(const char* func, int line);
-		bool connectMysql();
-		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
-		string createInfoTableQuery(int size);
-		bool renameDB();
-		bool executeSingleQueryString(string query);
-		bool executeMultiQueryString(string query);
-		bool createVideoDB_fromTemplate(string name);
-		char checkStringBuff[0xFFFF];
-		inline string checkString(string& str, int size) {
-			size_t size_ = ((size_t)size > (sizeof(checkStringBuff)-1)) ? sizeof(checkStringBuff)-1 : size;
-			string str2 = (str.length() > size_) ? str.substr(0, size_) : str;
-//			memset(checkStringBuff, 0, sizeof(checkStringBuff));
-			memset(checkStringBuff, 0, size_+1);
-			mysql_real_escape_string(mysqlCon, checkStringBuff, str2.c_str(), str2.length());
-			str = (string)checkStringBuff;
-			return "'" + str + "'";
-		}
-		inline string checkInt(int i) { return to_string(i); }
-		void checkTemplateDB();
-		bool createTemplateDB(bool quiet = false);
 
 	public:
 		CMV2Mysql();

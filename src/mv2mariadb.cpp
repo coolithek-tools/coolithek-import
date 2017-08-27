@@ -30,13 +30,13 @@
 #include <getopt.h>
 #include <libgen.h>
 
-#include <json/json.h>
-#include <mysqld_error.h>
-
 #include <iostream>
 #include <fstream>
 #include <climits>
 
+#include <json/json.h>
+
+#include "sql.h"
 #include "mv2mariadb.h"
 #include "helpers.h"
 #include "filehelpers.h"
@@ -44,27 +44,34 @@
 #define DB_1 "-1.json"
 #define DB_2 "-2.json"
 
+GSettings		g_settings;
+const char*		g_progName;
+const char*		g_progCopyright;
+const char*		g_progVersion;
+const char*		g_dbVersion;
+string			g_jsondb;
+string			g_templateDBFile;
+string			g_mvVersion;
+bool			g_debugPrint;
+vector<TVideoInfoEntry>	g_videoInfo;
+
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
 {
-	progName	= "mv2mariadb";
-	progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
-	progVersion	= "v"PROGVERSION;
+	g_progName	= "mv2mariadb";
+	g_progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
+	g_progVersion	= "v"PROGVERSION;
+	g_dbVersion	= DBVERSION;
 
 	epoch  = 180; /* 1/2 year*/
 	epochStd = false;
+	g_debugPrint = false;
 	multiQuery = true;
-	debugPrint = false;
-
-	mysqlCon = NULL;
 }
 
 CMV2Mysql::~CMV2Mysql()
 {
-	videoInfo.clear();
-	if (mysqlCon != NULL) {
-		mysql_close(mysqlCon);
-	}
+	g_videoInfo.clear();
 }
 
 CMV2Mysql* CMV2Mysql::getInstance()
@@ -77,12 +84,12 @@ CMV2Mysql* CMV2Mysql::getInstance()
 
 void CMV2Mysql::printHeader()
 {
-	printf("%s %s\n", progName, progVersion);
+	printf("%s %s\n", g_progName, g_progVersion);
 }
 
 void CMV2Mysql::printCopyright()
 {
-	printf("%s\n", progCopyright);
+	printf("%s\n", g_progCopyright);
 }
 
 void CMV2Mysql::printHelp()
@@ -117,18 +124,10 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.videoDb_TableInfo	= configFile.getString("videoDb_TableInfo",    "channelinfo");
 	g_settings.videoDb_TableVersion	= configFile.getString("videoDb_TableVersion", "version");
 
-
-	VIDEO_DB			= g_settings.videoDb;
 	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
-	VIDEO_DB_TEMPLATE		= g_settings.videoDbTemplate;
 	if (g_settings.testMode) {
-		VIDEO_DB		+= g_settings.testLabel;
-		VIDEO_DB_TMP_1		+= g_settings.testLabel;
-		VIDEO_DB_TEMPLATE	+= g_settings.testLabel;
+		VIDEO_DB_TMP_1	+= g_settings.testLabel;
 	}
-	VIDEO_TABLE			= g_settings.videoDb_TableVideo;
-	INFO_TABLE			= g_settings.videoDb_TableInfo;
-	VERSION_TABLE			= g_settings.videoDb_TableVersion;
 
 	if (erg)
 		configFile.setModifiedFlag(true);
@@ -156,7 +155,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 {
 	if (argc < 2) {
 		printHeader();
-		printf("\tType '%s --help' to print help screen\n", progName);
+		printf("\tType '%s --help' to print help screen\n", g_progName);
 		return 0;
 	}
 
@@ -164,7 +163,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 	string arg0         = (string)argv[0];
 	string path0        = getPathName(arg0);
 	configFileName      = getRealPath(path0) + "/" + getBaseName(arg0) + ".conf";
-	templateDBFile      = getRealPath(path0) + "/sql/"+ "template.sql";
+	g_templateDBFile    = getRealPath(path0) + "/sql/"+ "template.sql";
 
 	int loadSettingsErg = loadSetup(configFileName);
 
@@ -172,6 +171,9 @@ int CMV2Mysql::run(int argc, char *argv[])
 		configFile.setModifiedFlag(true);
 		saveSetup(configFileName);
 	}
+
+	csql = CSql::getInstance();
+	multiQuery = csql->multiQuery;
 
 	int noParam       = 0;
 	int requiredParam = 1;
@@ -198,11 +200,11 @@ int CMV2Mysql::run(int argc, char *argv[])
 				printCopyright();
 				return 0;
 			case 'f':
-				jsondb = string(optarg);
+				g_jsondb = string(optarg);
 				break;
 			case 't':
-				connectMysql();
-				createTemplateDB();
+				csql->connectMysql();
+				csql->createTemplateDB();
 				return 0;
 			case 'e':
 				epoch = atoi(optarg);
@@ -211,19 +213,19 @@ int CMV2Mysql::run(int argc, char *argv[])
 				epochStd = true;
 				break;
 			case 'd':
-				debugPrint = true;
+				g_debugPrint = true;
 				break;
 			default:
 				break;
 		}
 	}
 
-	if (!openDB(jsondb))
+	if (!openDB(g_jsondb))
 		return 1;
 
-	connectMysql();
-	checkTemplateDB();
-	parseDB(jsondb);
+	csql->connectMysql();
+	csql->checkTemplateDB();
+	parseDB(g_jsondb);
 
 	return 0;
 }
@@ -237,7 +239,7 @@ void CMV2Mysql::convertDB(string db)
 	}
 	FILE* f2 = fopen((db + DB_1).c_str(), "w+");
 
-	printf("[%s] convert json db...", progName); fflush(stdout);
+	printf("[%s] convert json db...", g_progName); fflush(stdout);
 
 	char buf[8192];
 	string line;
@@ -289,7 +291,7 @@ bool CMV2Mysql::openDB(string db)
 		return false;
 	}
 
-	printf("[%s] read json db...", progName); fflush(stdout);
+	printf("[%s] read json db...", g_progName); fflush(stdout);
 	fseek(f, 0, SEEK_END);
 	size_t fsize = ftell(f);
 	fseek(f, 0, SEEK_SET);
@@ -338,7 +340,7 @@ bool CMV2Mysql::openDB(string db)
 
 bool CMV2Mysql::parseDB(string db)
 {
-	printf("[%s] parse json db & write temporary database...", progName); fflush(stdout);
+	printf("[%s] parse json db & write temporary database...", g_progName); fflush(stdout);
 
 	Json::Value root;
 	Json::Reader reader;
@@ -376,17 +378,15 @@ bool CMV2Mysql::parseDB(string db)
 	uint32_t writeLen = 0;
 	bool writeStart = true;
 
-	createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
+	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
 
 	string sqlBuff = "";
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
-			show_error(__func__, __LINE__);
-	}
+	if (multiQuery)
+		csql->setServerMultiStatementsOff();
 
 	gettimeofday(&t1, NULL);
 	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	if (debugPrint) {
+	if (g_debugPrint) {
 		printf("\e[?25l"); /* cursor off */
 		printf("\n");
 	}
@@ -395,7 +395,7 @@ bool CMV2Mysql::parseDB(string db)
 
 		if (i == 0) {		/* head 1 */
 			data = root[i].get("Filmliste", "");
-			mvVersion = data[3].asString();
+			g_mvVersion = data[3].asString();
 		}
 		else if (i == 1) {	/* head 2 */
 			data = root[i].get("Filmliste", "");
@@ -406,7 +406,7 @@ bool CMV2Mysql::parseDB(string db)
 			videoEntry.channel		= data[0].asString();
 			if ((videoEntry.channel != "") && (videoEntry.channel != cName)) {
 				if (cName != "") {
-					videoInfo.push_back(videoInfoEntry);
+					g_videoInfo.push_back(videoInfoEntry);
 				}
 				cName = videoEntry.channel;
 				cCount = 0;
@@ -459,21 +459,20 @@ bool CMV2Mysql::parseDB(string db)
 				videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
 
 			entrys++;
-			if (debugPrint) {
+			if (g_debugPrint) {
 				if ((entrys % 32) == 0)
-					printf("[%s-debug] Processed entries: %d\r", progName, entrys);
+					printf("[%s-debug] Processed entries: %d\r", g_progName, entrys);
 				if ((entrys % 32*8) == 0)
 					fflush(stdout);
 			}
-			vQuery = createVideoTableQuery(entrys, writeStart, &videoEntry);
+			vQuery = csql->createVideoTableQuery(entrys, writeStart, &videoEntry);
 			writeStart = false;
 
 			uint32_t maxWriteLen = 1048576;		/* 1MB */
 			if ((writeLen + vQuery.length()) >= maxWriteLen) {
 				sqlBuff += ";\n";
-				if (!executeSingleQueryString(sqlBuff))
-					show_error(__func__, __LINE__);
-				vQuery = createVideoTableQuery(entrys, true, &videoEntry);
+				csql->executeSingleQueryString(sqlBuff);
+				vQuery = csql->createVideoTableQuery(entrys, true, &videoEntry);
 				sqlBuff = "";
 				writeLen = 0;
 			}
@@ -483,40 +482,38 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	if (!sqlBuff.empty()) {
-		if (!executeSingleQueryString(sqlBuff))
-			show_error(__func__, __LINE__);
+		csql->executeSingleQueryString(sqlBuff);
 		sqlBuff.clear();
 	}
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-			show_error(__func__, __LINE__);
-	}
-	if (debugPrint) {
+	if (multiQuery)
+		csql->setServerMultiStatementsOn();
+
+	if (g_debugPrint) {
 		printf("\e[?25h"); /* cursor on */
 		printf("\n");
 	}
 
-	videoInfo.push_back(videoInfoEntry);
-	string itq = createInfoTableQuery(entrys);
-	executeMultiQueryString(itq);
+	g_videoInfo.push_back(videoInfoEntry);
+	string itq = csql->createInfoTableQuery(entrys);
+	csql->executeMultiQueryString(itq);
 
-	if (!debugPrint)
+	if (!g_debugPrint)
 		printf("\n");
 
 	if (entrys < 1000) {
-		printf("\n[%s] Video list too small (%d entrys), no transfer to the database.\n", progName, entrys); fflush(stdout);
+		printf("\n[%s] Video list too small (%d entrys), no transfer to the database.\n", g_progName, entrys); fflush(stdout);
 		return false;
 	}
 
-	renameDB();
+	csql->renameDB();
 
-	printf("[%s] all tasks done (%u (%d %s) / %u entrys)\n", progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
+	printf("[%s] all tasks done (%u (%d %s) / %u entrys)\n", g_progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
 	gettimeofday(&t1, NULL);
 	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
 	int32_t workTime = (int32_t)((workDTms - nowDTms) / 1000);
 	double entryTime_us = (workDTus - nowDTms*1000) / entrys;
-	printf("[%s] duration: %d sec (%.03f msec/entry)\n", progName, workTime, entryTime_us/1000);
+	printf("[%s] duration: %d sec (%.03f msec/entry)\n", g_progName, workTime, entryTime_us/1000);
 	fflush(stdout);
 
 	return true;
@@ -539,286 +536,6 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 	else
 		ret = url2;
 
-	return ret;
-}
-
-void CMV2Mysql::show_error(const char* func, int line)
-{
-	printf("\n[%s:%d] Error(%d) [%s] \"%s\"\n",
-	       				    func, line,
-					    mysql_errno(mysqlCon),
-					    mysql_sqlstate(mysqlCon),
-					    mysql_error(mysqlCon));
-	mysql_close(mysqlCon);
-	mysqlCon = NULL;
-	exit(-1);
-}
-
-bool CMV2Mysql::connectMysql()
-{
-	FILE* f = fopen("pw_conv.txt", "r");
-	if (f == NULL) {
-		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, "pw_conv.txt");
-		exit(1);
-	}
-	char buf[256];
-	fgets(buf, sizeof(buf), f);
-	fclose(f);
-	string pw = buf;
-	vector<string> v = split(pw, ':');
-	sqlUser = v[0];
-	sqlPW   = v[1];
-
-	mysqlCon = mysql_init(NULL);
-
-	int maxAllowedPacketDef = 4194304;			// default
-	int maxAllowedPacket = maxAllowedPacketDef*64;
-//	int maxAllowedPacket = maxAllowedPacketDef*256;		// max value
-	if (mysql_optionsv(mysqlCon, MYSQL_OPT_MAX_ALLOWED_PACKET, (const void*)(&maxAllowedPacket)) != 0)
-		show_error(__func__, __LINE__);
-
-	unsigned long flags = 0;
-	if (multiQuery)
-		flags |= CLIENT_MULTI_STATEMENTS;
-//	flags |= CLIENT_COMPRESS;
-	if (!mysql_real_connect(mysqlCon, "127.0.0.1", sqlUser.c_str(), sqlPW.c_str(), NULL, 3306, NULL, flags))
-		show_error(__func__, __LINE__);
-
-	if (mysql_set_character_set(mysqlCon, "utf8") != 0)
-		show_error(__func__, __LINE__);
-
-	return true;
-}
-
-bool CMV2Mysql::executeSingleQueryString(string query)
-{
-	bool ret = true;
-
-	if (mysql_real_query(mysqlCon, query.c_str(), query.length()) != 0)
-		show_error(__func__, __LINE__);
-
-	return ret;
-}
-
-bool CMV2Mysql::executeMultiQueryString(string query)
-{
-	if (!multiQuery) {
-		printf("[%s:%d] No multiple statement execution support.\n", __func__, __LINE__);
-		exit(1);
-	}
-	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-		show_error(__func__, __LINE__);
-
-	int status = mysql_real_query(mysqlCon, query.c_str(), query.length());
-	if (status)
-		show_error(__func__, __LINE__);
-	
-	bool ret = true;
-	/* process each statement result */
-	do {
-		ret = true;
-		/* did current statement return data? */
-		MYSQL_RES *result = mysql_store_result(mysqlCon);
-		if (result) {
-			/* yes; free the result set */
-			mysql_free_result(result);
-		}
-		else {	/* no result set or error */
-			if (mysql_field_count(mysqlCon) != 0) {
-				/* some error occurred */
-				printf("Could not retrieve result set\n");
-				ret = false;
-				break;
-			}
-		}
-		/* more results? -1 = no, >0 = error, 0 = yes (keep looping) */
-		if ((status = mysql_next_result(mysqlCon)) > 0) {
-//			printf("Could not execute statement\n");
-//			ret = false;
-		}
-	} while (status == 0);
-
-	return ret;
-}
-
-bool CMV2Mysql::createVideoDB_fromTemplate(string name)
-{
-	string query = "DROP DATABASE IF EXISTS `" + name +"`;";
-	query += "CREATE DATABASE IF NOT EXISTS `" + name + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
-	query += "CREATE TABLE " + name + "." + VIDEO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VIDEO_TABLE + ";";
-	query += "CREATE TABLE " + name + "." + INFO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + INFO_TABLE + ";";
-	query += "CREATE TABLE " + name + "." + VERSION_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VERSION_TABLE + ";";
-	query += "USE `" + name + "`;";
-
-	return executeMultiQueryString(query);
-}
-
-string CMV2Mysql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry)
-{
-	string entry = "";
-	if (startRow) {
-		entry += "INSERT INTO " + VIDEO_TABLE + " VALUES ";
-	}
-	else {
-		entry += ",";
-	}
-	entry += "(";
-	entry += checkInt(count) + ",";
-	entry += checkString(videoEntry->channel, 256) + ",";
-	entry += checkString(videoEntry->theme, 256) + ",";
-	entry += checkString(videoEntry->title, 1024) + ",";
-	entry += checkInt(videoEntry->duration) + ",";
-	entry += checkInt(videoEntry->size_mb) + ",";
-	entry += checkString(videoEntry->description, 8192) + ",";
-	entry += checkString(videoEntry->url, 1024) + ",";
-	entry += checkString(videoEntry->website, 1024) + ",";
-	entry += checkString(videoEntry->subtitle, 1024) + ",";
-	entry += checkString(videoEntry->url_rtmp, 1024) + ",";
-	entry += checkString(videoEntry->url_small, 1024) + ",";
-	entry += checkString(videoEntry->url_rtmp_small, 1024) + ",";
-	entry += checkString(videoEntry->url_hd, 1024) + ",";
-	entry += checkString(videoEntry->url_rtmp_hd, 1024) + ",";
-	entry += checkInt(videoEntry->date_unix) + ",";
-	entry += checkString(videoEntry->url_history, 1024) + ",";
-	entry += checkString(videoEntry->geo, 1024) + ",";
-	entry += checkInt(0) + ",";
-	entry += checkString(videoEntry->new_entry, 1024);
-	entry += ")";
-
-	return entry;
-}
-
-string CMV2Mysql::createInfoTableQuery(int size)
-{
-	string entry = "";
-	for (size_t i = 0; i < videoInfo.size(); ++i) {
-		entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
-		entry += checkString(videoInfo[i].channel, 256) + ", ";
-		entry += checkInt(videoInfo[i].count) + ", ";
-		entry += checkInt(videoInfo[i].lastest) + ", ";
-		entry += checkInt(videoInfo[i].oldest);
-		entry += ");";
-	}
-	videoInfo.clear();
-
-	struct stat st;
-	stat(jsondb.c_str(), &st);
-
-	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
-	string tmpStr = (string)DBVERSION;
-	entry += checkString(tmpStr, 256) + ", ";
-	entry += checkInt(time(0)) + ", ";
-	entry += checkString(mvVersion, 256) + ", ";
-	entry += checkInt(st.st_mtime) + ", ";
-	entry += checkInt(size) + ", ";
-	tmpStr = (string)progName;
-	entry += checkString(tmpStr, 256) + ", ";
-	tmpStr = (string)progVersion;
-	entry += checkString(tmpStr, 256);
-	entry += ");";
-
-	return entry;
-}
-
-bool CMV2Mysql::renameDB()
-{
-	struct timeval t1;
-	gettimeofday(&t1, NULL);
-	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	printf("[%s] rename temporary database...", progName); fflush(stdout);
-
-	string query = "";
-	query += "START TRANSACTION;";
-	query += "SET autocommit = 0;";
-	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB +"`;";
-	query += "CREATE DATABASE IF NOT EXISTS `" + VIDEO_DB + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VIDEO_TABLE + " TO " + VIDEO_DB + "." + VIDEO_TABLE + ";";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + INFO_TABLE + " TO " + VIDEO_DB + "." + INFO_TABLE + ";";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VERSION_TABLE + " TO " + VIDEO_DB + "." + VERSION_TABLE + ";";
-	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB_TMP_1 +"`;";
-	query += "COMMIT;";
-	bool ret = executeMultiQueryString(query);
-
-	gettimeofday(&t1, NULL);
-	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
-
-	return ret;
-}
-
-void CMV2Mysql::checkTemplateDB()
-{
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
-			show_error(__func__, __LINE__);
-	}
-
-	string sql = "SHOW DATABASES;";
-	if (!executeSingleQueryString(sql))
-		show_error(__func__, __LINE__);
-
-	MYSQL_RES* result = mysql_store_result(mysqlCon);
-	MYSQL_ROW row;
-	bool dbExists = false;
-	while ((row = mysql_fetch_row(result)))
-	{
-		if (VIDEO_DB_TEMPLATE == (string)row[0]) {
-			if (debugPrint)
-				printf("[%s-debug] check i.o., database [%s] exists.\n", progName, VIDEO_DB_TEMPLATE.c_str());
-			
-			dbExists = true;
-			break;
-		}
-	}
-	if (!dbExists) {
-		bool ret = createTemplateDB(true);
-		if (debugPrint && ret)
-			printf("[%s-debug] database [%s] successfully created.\n", progName, VIDEO_DB_TEMPLATE.c_str());
-	}
-
-	mysql_free_result(result);
-
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-			show_error(__func__, __LINE__);
-	}
-}
-
-bool CMV2Mysql::createTemplateDB(bool quiet/* = false*/)
-{
-	size_t size = 0;
-	const char* buf = NULL;
-	if (file_exists(templateDBFile.c_str())) {
-		FILE* f = fopen(templateDBFile.c_str(), "r");
-		if (f != NULL) {
-			size = file_size(templateDBFile.c_str());
-			buf = new char[size];
-			size = fread((void*)buf, size, 1, f);
-			fclose(f);
-		}
-
-	}
-	if (size == 0) {
-		printf("\n[%s] error read database template [%s]\n", progName, templateDBFile.c_str());
-		if (buf != NULL)
-			delete [] buf;
-		exit(1);
-	}
-	string sql = (string)buf;
-	delete [] buf;
-
-	string search = "@@@db_template@@@";
-	sql = str_replace(search, VIDEO_DB_TEMPLATE, sql);
-	search = "@@@tab_channelinfo@@@";
-	sql = str_replace(search, INFO_TABLE, sql);
-	search = "@@@tab_version@@@";
-	sql = str_replace(search, VERSION_TABLE, sql);
-	search = "@@@tab_video@@@";
-	sql = str_replace(search, VIDEO_TABLE, sql);
-
-	bool ret = executeMultiQueryString(sql);
-	if (!quiet)
-		printf("\n[%s] database [%s] successfully created or updated.\n", progName, VIDEO_DB_TEMPLATE.c_str());
 	return ret;
 }
 

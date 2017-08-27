@@ -27,6 +27,7 @@ endif
 
 PROG_SOURCES = \
 	src/mv2mariadb.cpp \
+	src/sql.cpp \
 	src/helpers.cpp \
 	src/filehelpers.cpp \
 	src/configfile.cpp

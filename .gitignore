@@ -1,6 +1,8 @@
 pw*.txt
 mv2mysql
 mv2mariadb
+mv2mariadb.conf
 zz*.sh
 *.log
-mv2mariadb.conf
+*.diff
+*.patch
