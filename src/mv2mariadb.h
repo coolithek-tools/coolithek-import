@@ -35,6 +35,7 @@
 
 #include "db.h"
 #include "helpers.h"
+#include "configfile.h"
 
 using namespace std;
 
@@ -68,9 +69,15 @@ typedef struct VideoInfoEntry
 	int    oldest;
 } TVideoInfoEntry;
 
+struct GSettings
+{
+	string dummy;
+};
+
 class CMV2Mysql
 {
 	private:
+		GSettings g_settings;
 		const char* progName;
 		const char* progCopyright;
 		const char* progVersion;
@@ -82,6 +89,8 @@ class CMV2Mysql
 		bool debugPrint;
 		string sqlUser;
 		string sqlPW;
+		string configFileName;
+		CConfigFile configFile;
 
 		string mvVersion;
 
@@ -96,6 +105,9 @@ class CMV2Mysql
 		bool openDB(string db);
 		bool parseDB(string db);
 		string convertUrl(string url1, string url2);
+
+		int loadSetup(string fname);
+		void saveSetup(string fname);
 
 		void show_error();
 		bool connectMysql();

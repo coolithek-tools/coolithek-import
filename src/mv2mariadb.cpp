@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <libgen.h>
 
 #include <json/json.h>
 #include <mysqld_error.h>
@@ -43,6 +44,7 @@
 #define DB_2 "-2.json"
 
 CMV2Mysql::CMV2Mysql()
+: configFile('\t')
 {
 	progName	= "mv2mariadb";
 	progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
@@ -94,6 +96,28 @@ void CMV2Mysql::printHelp()
 	printf("	-v | --version	   => Display versions info and exit\n");
 }
 
+int CMV2Mysql::loadSetup(string fname)
+{
+	int erg = 0;
+	if (!configFile.loadConfig(fname.c_str()))
+		/* file not exist */
+		erg = 1;
+
+	g_settings.dummy = configFile.getString("dummy", "DummyDummy");
+
+	if (erg)
+		configFile.setModifiedFlag(true);
+	return erg;
+}
+
+void CMV2Mysql::saveSetup(string fname)
+{
+	configFile.setString("dummy", g_settings.dummy);
+
+	if (configFile.getModifiedFlag())
+		configFile.saveConfig(fname.c_str());
+}
+
 int CMV2Mysql::run(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -101,6 +125,19 @@ int CMV2Mysql::run(int argc, char *argv[])
 		printf("\tType '%s --help' to print help screen\n", progName);
 		return 0;
 	}
+
+	/* set name for configFileName */
+	string arg0         = (string)argv[0];
+	string path0        = getPathName(arg0);
+	configFileName      = getRealPath(path0) + "/" + getBaseName(arg0)+ ".conf";
+
+	int loadSettingsErg = loadSetup(configFileName);
+
+	if (loadSettingsErg) {
+		configFile.setModifiedFlag(true);
+		saveSetup(configFileName);
+	}
+
 	int noParam       = 0;
 	int requiredParam = 1;
 //	int optionalParam = 2;

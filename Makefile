@@ -27,7 +27,8 @@ endif
 
 PROG_SOURCES = \
 	src/mv2mariadb.cpp \
-	src/helpers.cpp
+	src/helpers.cpp \
+	src/configfile.cpp
 
 mv2mariadb: $(PROG_SOURCES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(PROG_SOURCES) -o mv2mariadb
