@@ -53,6 +53,7 @@ CMV2Mysql::CMV2Mysql()
 
 	epoch  = 180; /* 1/2 year*/
 	epochStd = false;
+	multiQuery = true;
 	debugPrint = false;
 
 	mysqlCon = NULL;
@@ -89,6 +90,7 @@ void CMV2Mysql::printHelp()
 	printHeader();
 	printCopyright();
 	printf("	-f | --file	   => Json file to parse\n");
+	printf("	-t | --template	   => Create template database\n");
 	printf("	-e | --epoch	   => Use not older entrys than 'epoch' days\n");
 	printf("			      (default 180 days)\n");
 	printf("	-s | --epoch-std   => Value of 'epoch' in hours (for debugging)\n");
@@ -161,7 +163,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 	/* set name for configFileName */
 	string arg0         = (string)argv[0];
 	string path0        = getPathName(arg0);
-	configFileName      = getRealPath(path0) + "/" + getBaseName(arg0)+ ".conf";
+	configFileName      = getRealPath(path0) + "/" + getBaseName(arg0) + ".conf";
+	templateDBFile      = getRealPath(path0) + "/sql/"+ "template.sql";
 
 	int loadSettingsErg = loadSetup(configFileName);
 
@@ -177,13 +180,14 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"help",	noParam,       NULL, 'h'},
 		{"version",	noParam,       NULL, 'v'},
 		{"file",	requiredParam, NULL, 'f'},
+		{"template",	noParam,       NULL, 't'},
 		{"epoch",	requiredParam, NULL, 'e'},
 		{"epoch-std",   noParam,       NULL, 's'},
 		{"debug-print", noParam,       NULL, 'd'},
 		{NULL,		0, NULL, 0}
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "h?vf:e:sd", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "h?vf:te:sd", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'h':
 			case '?':
@@ -196,6 +200,10 @@ int CMV2Mysql::run(int argc, char *argv[])
 			case 'f':
 				jsondb = string(optarg);
 				break;
+			case 't':
+				connectMysql();
+				createTemplateDB();
+				return 0;
 			case 'e':
 				epoch = atoi(optarg);
 				break;
@@ -214,6 +222,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		return 1;
 
 	connectMysql();
+	checkTemplateDB();
 	parseDB(jsondb);
 
 	return 0;
@@ -370,8 +379,10 @@ bool CMV2Mysql::parseDB(string db)
 	createVideoDB_fromTemplate(VIDEO_DB_TMP_1);
 
 	string sqlBuff = "";
-	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
-		show_error();
+	if (multiQuery) {
+		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
+			show_error(__func__, __LINE__);
+	}
 
 	gettimeofday(&t1, NULL);
 	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
@@ -460,8 +471,8 @@ bool CMV2Mysql::parseDB(string db)
 			uint32_t maxWriteLen = 1048576;		/* 1MB */
 			if ((writeLen + vQuery.length()) >= maxWriteLen) {
 				sqlBuff += ";\n";
-				if (mysql_real_query(mysqlCon, sqlBuff.c_str(), sqlBuff.length()) != 0)
-					show_error();
+				if (!executeSingleQueryString(sqlBuff))
+					show_error(__func__, __LINE__);
 				vQuery = createVideoTableQuery(entrys, true, &videoEntry);
 				sqlBuff = "";
 				writeLen = 0;
@@ -472,12 +483,14 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	if (!sqlBuff.empty()) {
-		if (mysql_real_query(mysqlCon, sqlBuff.c_str(), sqlBuff.length()) != 0)
-			show_error();
+		if (!executeSingleQueryString(sqlBuff))
+			show_error(__func__, __LINE__);
 		sqlBuff.clear();
 	}
-	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-		show_error();
+	if (multiQuery) {
+		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
+			show_error(__func__, __LINE__);
+	}
 	if (debugPrint) {
 		printf("\e[?25h"); /* cursor on */
 		printf("\n");
@@ -529,9 +542,11 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 	return ret;
 }
 
-void CMV2Mysql::show_error()
+void CMV2Mysql::show_error(const char* func, int line)
 {
-	printf("\nError(%d) [%s] \"%s\"\n", mysql_errno(mysqlCon),
+	printf("\n[%s:%d] Error(%d) [%s] \"%s\"\n",
+	       				    func, line,
+					    mysql_errno(mysqlCon),
 					    mysql_sqlstate(mysqlCon),
 					    mysql_error(mysqlCon));
 	mysql_close(mysqlCon);
@@ -544,7 +559,7 @@ bool CMV2Mysql::connectMysql()
 	FILE* f = fopen("pw_conv.txt", "r");
 	if (f == NULL) {
 		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, "pw_conv.txt");
-		return false;
+		exit(1);
 	}
 	char buf[256];
 	fgets(buf, sizeof(buf), f);
@@ -560,29 +575,48 @@ bool CMV2Mysql::connectMysql()
 	int maxAllowedPacket = maxAllowedPacketDef*64;
 //	int maxAllowedPacket = maxAllowedPacketDef*256;		// max value
 	if (mysql_optionsv(mysqlCon, MYSQL_OPT_MAX_ALLOWED_PACKET, (const void*)(&maxAllowedPacket)) != 0)
-		show_error();
+		show_error(__func__, __LINE__);
 
 	unsigned long flags = 0;
-	flags |= CLIENT_MULTI_STATEMENTS;
+	if (multiQuery)
+		flags |= CLIENT_MULTI_STATEMENTS;
 //	flags |= CLIENT_COMPRESS;
 	if (!mysql_real_connect(mysqlCon, "127.0.0.1", sqlUser.c_str(), sqlPW.c_str(), NULL, 3306, NULL, flags))
-		show_error();
+		show_error(__func__, __LINE__);
 
 	if (mysql_set_character_set(mysqlCon, "utf8") != 0)
-		show_error();
+		show_error(__func__, __LINE__);
 
 	return true;
 }
 
+bool CMV2Mysql::executeSingleQueryString(string query)
+{
+	bool ret = true;
+
+	if (mysql_real_query(mysqlCon, query.c_str(), query.length()) != 0)
+		show_error(__func__, __LINE__);
+
+	return ret;
+}
+
 bool CMV2Mysql::executeMultiQueryString(string query)
 {
+	if (!multiQuery) {
+		printf("[%s:%d] No multiple statement execution support.\n", __func__, __LINE__);
+		exit(1);
+	}
+	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
+		show_error(__func__, __LINE__);
+
 	int status = mysql_real_query(mysqlCon, query.c_str(), query.length());
 	if (status)
-		show_error();
+		show_error(__func__, __LINE__);
 	
 	bool ret = true;
 	/* process each statement result */
 	do {
+		ret = true;
 		/* did current statement return data? */
 		MYSQL_RES *result = mysql_store_result(mysqlCon);
 		if (result) {
@@ -599,8 +633,8 @@ bool CMV2Mysql::executeMultiQueryString(string query)
 		}
 		/* more results? -1 = no, >0 = error, 0 = yes (keep looping) */
 		if ((status = mysql_next_result(mysqlCon)) > 0) {
-			printf("Could not execute statement\n");
-			ret = false;
+//			printf("Could not execute statement\n");
+//			ret = false;
 		}
 	} while (status == 0);
 
@@ -697,6 +731,82 @@ bool CMV2Mysql::copyDB()
 	time_t endTime = time(0);
 	printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
 	
+	return ret;
+}
+
+void CMV2Mysql::checkTemplateDB()
+{
+	if (multiQuery) {
+		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
+			show_error(__func__, __LINE__);
+	}
+
+	string sql = "SHOW DATABASES;";
+	if (!executeSingleQueryString(sql))
+		show_error(__func__, __LINE__);
+
+	MYSQL_RES* result = mysql_store_result(mysqlCon);
+	MYSQL_ROW row;
+	bool dbExists = false;
+	while ((row = mysql_fetch_row(result)))
+	{
+		if (VIDEO_DB_TEMPLATE == (string)row[0]) {
+			if (debugPrint)
+				printf("[%s-debug] check i.o., database [%s] exists.\n", progName, VIDEO_DB_TEMPLATE.c_str());
+			
+			dbExists = true;
+			break;
+		}
+	}
+	if (!dbExists) {
+		bool ret = createTemplateDB(true);
+		if (debugPrint && ret)
+			printf("[%s-debug] database [%s] successfully created.\n", progName, VIDEO_DB_TEMPLATE.c_str());
+	}
+
+	mysql_free_result(result);
+
+	if (multiQuery) {
+		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
+			show_error(__func__, __LINE__);
+	}
+}
+
+bool CMV2Mysql::createTemplateDB(bool quiet/* = false*/)
+{
+	size_t size = 0;
+	const char* buf = NULL;
+	if (file_exists(templateDBFile.c_str())) {
+		FILE* f = fopen(templateDBFile.c_str(), "r");
+		if (f != NULL) {
+			size = file_size(templateDBFile.c_str());
+			buf = new char[size];
+			size = fread((void*)buf, size, 1, f);
+			fclose(f);
+		}
+
+	}
+	if (size == 0) {
+		printf("\n[%s] error read database template [%s]\n", progName, templateDBFile.c_str());
+		if (buf != NULL)
+			delete [] buf;
+		exit(1);
+	}
+	string sql = (string)buf;
+	delete [] buf;
+
+	string search = "@@@db_template@@@";
+	sql = str_replace(search, VIDEO_DB_TEMPLATE, sql);
+	search = "@@@tab_channelinfo@@@";
+	sql = str_replace(search, INFO_TABLE, sql);
+	search = "@@@tab_version@@@";
+	sql = str_replace(search, VERSION_TABLE, sql);
+	search = "@@@tab_video@@@";
+	sql = str_replace(search, VIDEO_TABLE, sql);
+
+	bool ret = executeMultiQueryString(sql);
+	if (!quiet)
+		printf("\n[%s] database [%s] successfully created or updated.\n", progName, VIDEO_DB_TEMPLATE.c_str());
 	return ret;
 }
 

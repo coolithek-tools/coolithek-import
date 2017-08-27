@@ -96,9 +96,11 @@ class CMV2Mysql
 		int epoch;
 		bool epochStd;
 		bool debugPrint;
+		bool multiQuery;
 		string sqlUser;
 		string sqlPW;
 		string configFileName;
+		string templateDBFile;
 		CConfigFile configFile;
 
 		string mvVersion;
@@ -125,11 +127,12 @@ class CMV2Mysql
 		int loadSetup(string fname);
 		void saveSetup(string fname);
 
-		void show_error();
+		void show_error(const char* func, int line);
 		bool connectMysql();
 		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
 		string createInfoTableQuery(int size);
 		bool copyDB();
+		bool executeSingleQueryString(string query);
 		bool executeMultiQueryString(string query);
 		bool createVideoDB_fromTemplate(string name);
 		char checkStringBuff[0xFFFF];
@@ -143,6 +146,8 @@ class CMV2Mysql
 			return "'" + str + "'";
 		}
 		inline string checkInt(int i) { return to_string(i); }
+		void checkTemplateDB();
+		bool createTemplateDB(bool quiet = false);
 
 	public:
 		CMV2Mysql();
