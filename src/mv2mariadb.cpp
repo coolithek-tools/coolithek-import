@@ -508,9 +508,9 @@ bool CMV2Mysql::parseDB(string db)
 		return false;
 	}
 
-	copyDB();
+	renameDB();
 
-	printf("[%s] done (%u (%d %s) / %u entrys)\n", progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
+	printf("[%s] all tasks done (%u (%d %s) / %u entrys)\n", progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
 	gettimeofday(&t1, NULL);
 	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
@@ -716,21 +716,29 @@ string CMV2Mysql::createInfoTableQuery(int size)
 	return entry;
 }
 
-bool CMV2Mysql::copyDB()
+bool CMV2Mysql::renameDB()
 {
-	time_t startTime = time(0);
-	printf("[%s] copy database...", progName); fflush(stdout);
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("[%s] rename temporary database...", progName); fflush(stdout);
 
-	createVideoDB_fromTemplate(VIDEO_DB);
 	string query = "";
-	query += "INSERT INTO " + VIDEO_DB + "." + VIDEO_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + VIDEO_TABLE + ";";
-	query += "INSERT INTO " + VIDEO_DB + "." + INFO_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + INFO_TABLE + ";";
-	query += "INSERT INTO " + VIDEO_DB + "." + VERSION_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + VERSION_TABLE + ";";
+	query += "START TRANSACTION;";
+	query += "SET autocommit = 0;";
+	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB +"`;";
+	query += "CREATE DATABASE IF NOT EXISTS `" + VIDEO_DB + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
+	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VIDEO_TABLE + " TO " + VIDEO_DB + "." + VIDEO_TABLE + ";";
+	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + INFO_TABLE + " TO " + VIDEO_DB + "." + INFO_TABLE + ";";
+	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VERSION_TABLE + " TO " + VIDEO_DB + "." + VERSION_TABLE + ";";
+	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB_TMP_1 +"`;";
+	query += "COMMIT;";
 	bool ret = executeMultiQueryString(query);
 
-	time_t endTime = time(0);
-	printf("done (%ld sec)\n", endTime-startTime); fflush(stdout);
-	
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
+
 	return ret;
 }
 

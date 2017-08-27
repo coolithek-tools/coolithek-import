@@ -131,7 +131,7 @@ class CMV2Mysql
 		bool connectMysql();
 		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
 		string createInfoTableQuery(int size);
-		bool copyDB();
+		bool renameDB();
 		bool executeSingleQueryString(string query);
 		bool executeMultiQueryString(string query);
 		bool createVideoDB_fromTemplate(string name);
