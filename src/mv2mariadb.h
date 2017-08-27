@@ -71,7 +71,16 @@ typedef struct VideoInfoEntry
 
 struct GSettings
 {
-	string dummy;
+	string videoDbBaseName;
+	string videoDb;
+	string videoDbTmp1;
+	string videoDbTemplate;
+	string videoDb_TableVideo;
+	string videoDb_TableInfo;
+	string videoDb_TableVersion;
+
+	string testLabel;
+	bool   testMode;
 };
 
 class CMV2Mysql
@@ -97,6 +106,13 @@ class CMV2Mysql
 		vector<TVideoInfoEntry> videoInfo;
 
 		MYSQL *mysqlCon;
+
+		string VIDEO_DB;
+		string VIDEO_DB_TMP_1;
+		string VIDEO_DB_TEMPLATE;
+		string VIDEO_TABLE;
+		string INFO_TABLE;
+		string VERSION_TABLE;
 
 		void printHeader();
 		void printCopyright();

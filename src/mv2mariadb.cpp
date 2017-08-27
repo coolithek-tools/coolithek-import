@@ -39,6 +39,7 @@
 
 #include "mv2mariadb.h"
 #include "helpers.h"
+#include "filehelpers.h"
 
 #define DB_1 "-1.json"
 #define DB_2 "-2.json"
@@ -103,7 +104,29 @@ int CMV2Mysql::loadSetup(string fname)
 		/* file not exist */
 		erg = 1;
 
-	g_settings.dummy = configFile.getString("dummy", "DummyDummy");
+	g_settings.testLabel		= configFile.getString("testLabel",            "_TEST");
+	g_settings.testMode		= configFile.getBool  ("testMode",             true);
+
+	g_settings.videoDbBaseName	= configFile.getString("videoDbBaseName",      "mediathek_1");
+	g_settings.videoDb		= configFile.getString("videoDb",              g_settings.videoDbBaseName);
+	g_settings.videoDbTmp1		= configFile.getString("videoDbTmp1",          g_settings.videoDbBaseName + "_tmp1");
+	g_settings.videoDbTemplate	= configFile.getString("videoDbTemplate",      g_settings.videoDbBaseName + "_template");
+	g_settings.videoDb_TableVideo	= configFile.getString("videoDb_TableVideo",   "video");
+	g_settings.videoDb_TableInfo	= configFile.getString("videoDb_TableInfo",    "channelinfo");
+	g_settings.videoDb_TableVersion	= configFile.getString("videoDb_TableVersion", "version");
+
+
+	VIDEO_DB			= g_settings.videoDb;
+	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
+	VIDEO_DB_TEMPLATE		= g_settings.videoDbTemplate;
+	if (g_settings.testMode) {
+		VIDEO_DB		+= g_settings.testLabel;
+		VIDEO_DB_TMP_1		+= g_settings.testLabel;
+		VIDEO_DB_TEMPLATE	+= g_settings.testLabel;
+	}
+	VIDEO_TABLE			= g_settings.videoDb_TableVideo;
+	INFO_TABLE			= g_settings.videoDb_TableInfo;
+	VERSION_TABLE			= g_settings.videoDb_TableVersion;
 
 	if (erg)
 		configFile.setModifiedFlag(true);
@@ -112,7 +135,16 @@ int CMV2Mysql::loadSetup(string fname)
 
 void CMV2Mysql::saveSetup(string fname)
 {
-	configFile.setString("dummy", g_settings.dummy);
+	configFile.setString("testLabel",            g_settings.testLabel);
+	configFile.setBool  ("testMode",             g_settings.testMode);
+
+	configFile.setString("videoDbBaseName",      g_settings.videoDbBaseName);
+	configFile.setString("videoDb",              g_settings.videoDb);
+	configFile.setString("videoDbTmp1",          g_settings.videoDbTmp1);
+	configFile.setString("videoDbTemplate",      g_settings.videoDbTemplate);
+	configFile.setString("videoDb_TableVideo",   g_settings.videoDb_TableVideo);
+	configFile.setString("videoDb_TableInfo",    g_settings.videoDb_TableInfo);
+	configFile.setString("videoDb_TableVersion", g_settings.videoDb_TableVersion);
 
 	if (configFile.getModifiedFlag())
 		configFile.saveConfig(fname.c_str());
@@ -579,9 +611,9 @@ bool CMV2Mysql::createVideoDB_fromTemplate(string name)
 {
 	string query = "DROP DATABASE IF EXISTS `" + name +"`;";
 	query += "CREATE DATABASE IF NOT EXISTS `" + name + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
-	query += "CREATE TABLE " + name + "."VIDEO_TABLE" LIKE "VIDEO_DB_TEMPLATE"."VIDEO_TABLE";";
-	query += "CREATE TABLE " + name + "."INFO_TABLE" LIKE "VIDEO_DB_TEMPLATE"."INFO_TABLE";";
-	query += "CREATE TABLE " + name + "."VERSION_TABLE" LIKE "VIDEO_DB_TEMPLATE"."VERSION_TABLE";";
+	query += "CREATE TABLE " + name + "." + VIDEO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VIDEO_TABLE + ";";
+	query += "CREATE TABLE " + name + "." + INFO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + INFO_TABLE + ";";
+	query += "CREATE TABLE " + name + "." + VERSION_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VERSION_TABLE + ";";
 	query += "USE `" + name + "`;";
 
 	return executeMultiQueryString(query);
@@ -591,7 +623,7 @@ string CMV2Mysql::createVideoTableQuery(int count, bool startRow, TVideoEntry* v
 {
 	string entry = "";
 	if (startRow) {
-		entry += "INSERT INTO " VIDEO_TABLE " VALUES ";
+		entry += "INSERT INTO " + VIDEO_TABLE + " VALUES ";
 	}
 	else {
 		entry += ",";
@@ -626,7 +658,7 @@ string CMV2Mysql::createInfoTableQuery(int size)
 {
 	string entry = "";
 	for (size_t i = 0; i < videoInfo.size(); ++i) {
-		entry += "INSERT INTO " INFO_TABLE " (channel, count, lastest, oldest) VALUES (";
+		entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
 		entry += checkString(videoInfo[i].channel, 256) + ", ";
 		entry += checkInt(videoInfo[i].count) + ", ";
 		entry += checkInt(videoInfo[i].lastest) + ", ";
@@ -638,7 +670,7 @@ string CMV2Mysql::createInfoTableQuery(int size)
 	struct stat st;
 	stat(jsondb.c_str(), &st);
 
-	entry += "INSERT INTO " VERSION_TABLE " (version, vdate, mvversion, mvdate, mventrys) VALUES (";
+	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys) VALUES (";
 	string tmpStr = (string)DBVERSION;
 	entry += checkString(tmpStr, 256) + ", ";
 	entry += checkInt(time(0)) + ", ";
@@ -657,9 +689,9 @@ bool CMV2Mysql::copyDB()
 
 	createVideoDB_fromTemplate(VIDEO_DB);
 	string query = "";
-	query += "INSERT INTO "VIDEO_DB"."VIDEO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VIDEO_TABLE";";
-	query += "INSERT INTO "VIDEO_DB"."INFO_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."INFO_TABLE";";
-	query += "INSERT INTO "VIDEO_DB"."VERSION_TABLE" SELECT * FROM "VIDEO_DB_TMP_1"."VERSION_TABLE";";
+	query += "INSERT INTO " + VIDEO_DB + "." + VIDEO_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + VIDEO_TABLE + ";";
+	query += "INSERT INTO " + VIDEO_DB + "." + INFO_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + INFO_TABLE + ";";
+	query += "INSERT INTO " + VIDEO_DB + "." + VERSION_TABLE + " SELECT * FROM " + VIDEO_DB_TMP_1 + "." + VERSION_TABLE + ";";
 	bool ret = executeMultiQueryString(query);
 
 	time_t endTime = time(0);

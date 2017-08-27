@@ -11,6 +11,7 @@
 #include <cppconn/prepared_statement.h>
 */
 
+/*
 //#define TEST_PREFIX
 #define TEST_PREFIX "_TEST"
 
@@ -23,7 +24,7 @@
 #define VIDEO_TABLE "video"
 #define INFO_TABLE "channelinfo"
 #define VERSION_TABLE "version"
-
+*/
 
 /*
 CREATE DATABASE IF NOT EXISTS `mediathek_1` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;

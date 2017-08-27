@@ -3,3 +3,4 @@ mv2mysql
 mv2mariadb
 zz*.sh
 *.log
+mv2mariadb.conf
