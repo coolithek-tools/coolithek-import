@@ -196,28 +196,27 @@ string CSql::createInfoTableQuery(int size)
 	return entry;
 }
 
-bool CSql::executeSingleQueryString(string query)
+bool CSql::executeSingleQueryString__(string query, const char* func, int line)
 {
 	bool ret = true;
 
 	if (mysql_real_query(mysqlCon, query.c_str(), query.length()) != 0)
-		show_error(__func__, __LINE__);
+		show_error(func, line);
 
 	return ret;
 }
 
-bool CSql::executeMultiQueryString(string query)
+bool CSql::executeMultiQueryString__(string query, const char* func, int line)
 {
 	if (!multiQuery) {
-		printf("[%s:%d] No multiple statement execution support.\n", __func__, __LINE__);
+		printf("[%s:%d] No multiple statement execution support.\n", func, line);
 		exit(1);
 	}
-	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-		show_error(__func__, __LINE__);
+	setServerMultiStatementsOn();
 
 	int status = mysql_real_query(mysqlCon, query.c_str(), query.length());
 	if (status)
-		show_error(__func__, __LINE__);
+		show_error(func, line);
 	
 	bool ret = true;
 	/* process each statement result */
@@ -261,14 +260,11 @@ bool CSql::createVideoDbFromTemplate(string name)
 
 void CSql::checkTemplateDB()
 {
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
-			show_error(__func__, __LINE__);
-	}
+	if (multiQuery)
+		setServerMultiStatementsOff();
 
 	string sql = "SHOW DATABASES;";
-	if (!executeSingleQueryString(sql))
-		show_error(__func__, __LINE__);
+	executeSingleQueryString(sql);
 
 	MYSQL_RES* result = mysql_store_result(mysqlCon);
 	MYSQL_ROW row;
@@ -291,10 +287,8 @@ void CSql::checkTemplateDB()
 
 	mysql_free_result(result);
 
-	if (multiQuery) {
-		if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-			show_error(__func__, __LINE__);
-	}
+	if (multiQuery)
+		setServerMultiStatementsOn();
 }
 
 bool CSql::createTemplateDB(bool quiet/* = false*/)
@@ -361,14 +355,14 @@ bool CSql::renameDB()
 	return ret;
 }
 
-void CSql::setServerMultiStatementsOff()
+void CSql::setServerMultiStatementsOff__(const char* func, int line)
 {
 	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_OFF) != 0)
-		show_error(__func__, __LINE__);
+		show_error(func, line);
 }
 
-void CSql::setServerMultiStatementsOn()
+void CSql::setServerMultiStatementsOn__(const char* func, int line)
 {
 	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
-		show_error(__func__, __LINE__);
+		show_error(func, line);
 }

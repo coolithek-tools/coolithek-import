@@ -38,6 +38,11 @@
 
 using namespace std;
 
+#define executeSingleQueryString(a)   executeSingleQueryString__(a, __func__, __LINE__)
+#define executeMultiQueryString(a)    executeMultiQueryString__(a, __func__, __LINE__)
+#define setServerMultiStatementsOff() setServerMultiStatementsOff__(__func__, __LINE__)
+#define setServerMultiStatementsOn()  setServerMultiStatementsOn__(__func__, __LINE__)
+
 class CSql
 {
 	private:
@@ -77,17 +82,14 @@ class CSql
 
 		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
 		string createInfoTableQuery(int size);
-		bool executeSingleQueryString(string query);
-		bool executeMultiQueryString(string query);
+		bool executeSingleQueryString__(string query, const char* func, int line);
+		bool executeMultiQueryString__(string query, const char* func, int line);
 		bool createVideoDbFromTemplate(string name);
 		void checkTemplateDB();
 		bool createTemplateDB(bool quiet = false);
 		bool renameDB();
-		void setServerMultiStatementsOff();
-		void setServerMultiStatementsOn();
+		void setServerMultiStatementsOff__(const char* func, int line);
+		void setServerMultiStatementsOn__(const char* func, int line);
 };
-
-#if 0
-#endif
 
 #endif // __SQL_H__
