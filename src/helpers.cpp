@@ -152,7 +152,12 @@ string getFileExt(string &file)
 string getRealPath(string &path)
 {
 	char buf[PATH_MAX];
-	return (string)realpath(path.c_str(), buf);
+	const char* ret = realpath(path.c_str(), buf);
+	if (ret == NULL) {
+		printf("[%s] Error: path %s not exists.\n", __func__, path.c_str());
+		exit(1);
+	}
+	return (string)ret;
 }
 
 
