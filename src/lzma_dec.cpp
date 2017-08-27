@@ -16,15 +16,14 @@
 
 #include "lzma_dec.h"
 
-#if 0
 CLZMAdec::CLZMAdec()
 {
+	noLzmaBufError = false;
 }
 
 CLZMAdec::~CLZMAdec()
 {
 }
-#endif
 
 bool CLZMAdec::init_decoder(lzma_stream *strm)
 {
@@ -168,6 +167,11 @@ bool CLZMAdec::decompress(lzma_stream *strm, const char *inname, FILE *infile, F
 			if (ret == LZMA_STREAM_END)
 				return true;
 
+			// 'noLzmaBufError' suppresses error message when
+			// an incomplete archive is unpacked.
+			if ((ret == LZMA_BUF_ERROR) && noLzmaBufError)
+				return true;
+
 			// It's not LZMA_OK nor LZMA_STREAM_END,
 			// so it must be an error code. See lzma/base.h
 			// (src/liblzma/api/lzma/base.h in the source package
@@ -232,8 +236,11 @@ bool CLZMAdec::decompress(lzma_stream *strm, const char *inname, FILE *infile, F
 	}
 }
 
-int CLZMAdec::decodeXZ(string inFile, string outFile)
+int CLZMAdec::decodeXZ(string inFile, string outFile, bool printBufError/*=true*/)
 {
+	bool oldLzmaBufError = noLzmaBufError;
+	noLzmaBufError = !printBufError;
+
 	lzma_stream strm = LZMA_STREAM_INIT;
 
 	if (!init_decoder(&strm))
@@ -257,6 +264,7 @@ int CLZMAdec::decodeXZ(string inFile, string outFile)
 	fclose(outfile);
 
 	lzma_end(&strm);
+	noLzmaBufError = oldLzmaBufError;
 
 	return ret;
 }
