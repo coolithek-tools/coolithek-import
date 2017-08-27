@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.0"
+#define PROGVERSION "0.3.1"
 #define DBVERSION "3.0"
 
 #include <sys/types.h>
@@ -704,13 +704,17 @@ string CMV2Mysql::createInfoTableQuery(int size)
 	struct stat st;
 	stat(jsondb.c_str(), &st);
 
-	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys) VALUES (";
+	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
 	string tmpStr = (string)DBVERSION;
 	entry += checkString(tmpStr, 256) + ", ";
 	entry += checkInt(time(0)) + ", ";
 	entry += checkString(mvVersion, 256) + ", ";
 	entry += checkInt(st.st_mtime) + ", ";
-	entry += checkInt(size);
+	entry += checkInt(size) + ", ";
+	tmpStr = (string)progName;
+	entry += checkString(tmpStr, 256) + ", ";
+	tmpStr = (string)progVersion;
+	entry += checkString(tmpStr, 256);
 	entry += ");";
 
 	return entry;

@@ -20,6 +20,8 @@ CREATE TABLE `@@@tab_version@@@` (
   `mvversion` varchar(256) DEFAULT NULL,
   `mvdate` int(11) DEFAULT NULL,
   `mventrys` int(11) DEFAULT NULL,
+  `progname` varchar(256) DEFAULT NULL,
+  `progversion` varchar(256) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
