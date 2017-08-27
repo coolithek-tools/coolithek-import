@@ -1,5 +1,16 @@
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <iostream>
-//#include <algorithm>
 #include <sstream>
 
 #include "helpers.h"
@@ -84,3 +95,88 @@ string to_string(unsigned long long i)
 	s << i;
 	return s.str();
 }
+
+string& str_replace(const string &search, const string &replace, string &text)
+{
+	if (search.empty() || text.empty())
+		return text;
+
+	size_t searchLen = search.length();
+	while (1) {
+		size_t pos = text.find(search);
+		if (pos == string::npos)
+			break;
+		text.replace(pos, searchLen, replace);
+	}
+	return text;
+}
+
+string _getPathName(string &path, string sep)
+{
+	size_t pos = path.find_last_of(sep);
+	if (pos == string::npos)
+		return path;
+	return path.substr(0, pos);
+}
+
+string _getBaseName(string &path, string sep)
+{
+	size_t pos = path.find_last_of(sep);
+	if (pos == string::npos)
+		return path;
+	if (path.length() == pos +1)
+		return "";
+	return path.substr(pos+1);
+}
+
+string getPathName(string &path)
+{
+	return _getPathName(path, "/");
+}
+
+string getBaseName(string &path)
+{
+	return _getBaseName(path, "/");
+}
+
+string getFileName(string &file)
+{
+	return _getPathName(file, ".");
+}
+
+string getFileExt(string &file)
+{
+	return _getBaseName(file, ".");
+}
+
+string getRealPath(string &path)
+{
+	char buf[PATH_MAX];
+	return (string)realpath(path.c_str(), buf);
+}
+
+
+off_t file_size(const char *filename)
+{
+	struct stat stat_buf;
+	if(::stat(filename, &stat_buf) == 0)
+	{
+		return stat_buf.st_size;
+	} else
+	{
+		return 0;
+	}
+}
+
+bool file_exists(const char *filename)
+{
+	struct stat stat_buf;
+	if(::stat(filename, &stat_buf) == 0)
+	{
+		return true;
+	} else
+	{
+		return false;
+	}
+}
+

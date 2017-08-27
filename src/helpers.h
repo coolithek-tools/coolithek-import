@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include <string>
 #include <vector>
@@ -25,5 +26,16 @@ string to_string(long);
 string to_string(unsigned long);
 string to_string(long long);
 string to_string(unsigned long long);
+
+string& str_replace(const string &search, const string &replace, string &text);
+
+string getPathName(string &path);
+string getBaseName(string &path);
+string getFileName(string &file);
+string getFileExt(string &file);
+string getRealPath(string &path);
+
+off_t file_size(const char *filename);
+bool file_exists(const char *filename);
 
 #endif // __helpers_h__
