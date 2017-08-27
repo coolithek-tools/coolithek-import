@@ -43,6 +43,7 @@ extern const char*		g_progCopyright;
 extern const char*		g_progVersion;
 extern const char*		g_dbVersion;
 extern string			g_jsondb;
+extern string			g_xzName;
 extern string			g_templateDBFile;
 extern string			g_mvVersion;
 extern bool			g_debugPrint;
@@ -178,7 +179,7 @@ string CSql::createInfoTableQuery(int size)
 	g_videoInfo.clear();
 
 	struct stat st;
-	stat(g_jsondb.c_str(), &st);
+	stat(g_xzName.c_str(), &st);
 
 	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
 	string tmpStr = (string)g_dbVersion;

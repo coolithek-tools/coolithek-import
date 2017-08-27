@@ -15,7 +15,7 @@ CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -Wl,-O3 -pipe -fno-strict-alias
 endif
 CFLAGS   += -fmax-errors=10
 
-LIBS     = -lstdc++ -ljsoncpp -lmariadb
+LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma
 LDFLAGS  = $(LIBS)
 DESTDIR  = /usr/local
 
@@ -30,7 +30,8 @@ PROG_SOURCES = \
 	src/sql.cpp \
 	src/helpers.cpp \
 	src/filehelpers.cpp \
-	src/configfile.cpp
+	src/configfile.cpp \
+	src/lzma_dec.cpp
 
 mv2mariadb: $(PROG_SOURCES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(PROG_SOURCES) -o mv2mariadb

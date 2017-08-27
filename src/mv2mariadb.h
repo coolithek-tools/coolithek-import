@@ -90,6 +90,7 @@ class CMV2Mysql
 
 		string jsondb;
 		string jsonBuf;
+		string workDir;
 		int epoch;
 		bool epochStd;
 		string configFileName;
@@ -107,6 +108,7 @@ class CMV2Mysql
 
 		int loadSetup(string fname);
 		void saveSetup(string fname);
+		void setDbFileNames(string xz);
 
 	public:
 		CMV2Mysql();

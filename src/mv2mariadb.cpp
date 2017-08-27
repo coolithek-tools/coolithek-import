@@ -40,6 +40,7 @@
 #include "mv2mariadb.h"
 #include "helpers.h"
 #include "filehelpers.h"
+#include "lzma_dec.h"
 
 #define DB_1 "-1.json"
 #define DB_2 "-2.json"
@@ -50,6 +51,7 @@ const char*		g_progCopyright;
 const char*		g_progVersion;
 const char*		g_dbVersion;
 string			g_jsondb;
+string			g_xzName;
 string			g_templateDBFile;
 string			g_mvVersion;
 bool			g_debugPrint;
@@ -151,6 +153,15 @@ void CMV2Mysql::saveSetup(string fname)
 		configFile.saveConfig(fname.c_str());
 }
 
+void CMV2Mysql::setDbFileNames(string xz)
+{
+	string path0   = getPathName(xz);
+	path0          = getRealPath(path0);
+	string file0   = getBaseName(xz);
+	g_xzName       = path0 + "/" + file0;
+	g_jsondb       = workDir + "/" + getFileName(file0);
+}
+
 int CMV2Mysql::run(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -162,8 +173,15 @@ int CMV2Mysql::run(int argc, char *argv[])
 	/* set name for configFileName */
 	string arg0         = (string)argv[0];
 	string path0        = getPathName(arg0);
-	configFileName      = getRealPath(path0) + "/" + getBaseName(arg0) + ".conf";
-	g_templateDBFile    = getRealPath(path0) + "/sql/"+ "template.sql";
+	path0               = getRealPath(path0);
+	configFileName      = path0 + "/" + getBaseName(arg0) + ".conf";
+	g_templateDBFile    = path0 + "/sql/"+ "template.sql";
+	workDir             = path0 + "/dl/work";
+	CFileHelpers cfh;
+	if (!cfh.createDir(workDir, 0755)) {
+		printf("Error: create dir %s\n", workDir.c_str());
+		exit(1);
+	}
 
 	int loadSettingsErg = loadSetup(configFileName);
 
@@ -200,7 +218,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 				printCopyright();
 				return 0;
 			case 'f':
-				g_jsondb = string(optarg);
+				setDbFileNames(string(optarg));
 				break;
 			case 't':
 				csql->connectMysql();
@@ -283,6 +301,13 @@ void CMV2Mysql::convertDB(string db)
 
 bool CMV2Mysql::openDB(string db)
 {
+	CLZMAdec* xzDec = new CLZMAdec();
+	if (xzDec != NULL) {
+		xzDec->decodeXZ(g_xzName, g_jsondb);
+		delete xzDec;
+	}
+
+
 	convertDB(db);
 
 	FILE* f = fopen((db + DB_1).c_str(), "r");
