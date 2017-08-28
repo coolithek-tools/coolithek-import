@@ -39,15 +39,11 @@
 
 extern GSettings		g_settings;
 extern const char*		g_progName;
-extern const char*		g_progCopyright;
 extern const char*		g_progVersion;
 extern const char*		g_dbVersion;
-extern string			g_jsondb;
-extern string			g_xzName;
-extern string			g_templateDBFile;
 extern string			g_mvVersion;
+extern time_t			g_mvDate;
 extern bool			g_debugPrint;
-extern vector<TVideoInfoEntry>	g_videoInfo;
 
 CSql::CSql()
 {
@@ -165,28 +161,25 @@ string CSql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoE
 	return entry;
 }
 
-string CSql::createInfoTableQuery(int size)
+string CSql::createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size)
 {
 	string entry = "";
-	for (size_t i = 0; i < g_videoInfo.size(); ++i) {
+	for (vector<TVideoInfoEntry>::iterator it = videoInfo->begin(); it != videoInfo->end(); ++it) {
 		entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
-		entry += checkString(g_videoInfo[i].channel, 256) + ", ";
-		entry += checkInt(g_videoInfo[i].count) + ", ";
-		entry += checkInt(g_videoInfo[i].lastest) + ", ";
-		entry += checkInt(g_videoInfo[i].oldest);
+		entry += checkString(it->channel, 256) + ", ";
+		entry += checkInt(it->count) + ", ";
+		entry += checkInt(it->lastest) + ", ";
+		entry += checkInt(it->oldest);
 		entry += ");";
 	}
-	g_videoInfo.clear();
-
-	struct stat st;
-	stat(g_xzName.c_str(), &st);
+	videoInfo->clear();
 
 	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
 	string tmpStr = (string)g_dbVersion;
 	entry += checkString(tmpStr, 256) + ", ";
 	entry += checkInt(time(0)) + ", ";
 	entry += checkString(g_mvVersion, 256) + ", ";
-	entry += checkInt(st.st_mtime) + ", ";
+	entry += checkInt(g_mvDate) + ", ";
 	entry += checkInt(size) + ", ";
 	tmpStr = (string)g_progName;
 	entry += checkString(tmpStr, 256) + ", ";
@@ -259,7 +252,7 @@ bool CSql::createVideoDbFromTemplate(string name)
 	return executeMultiQueryString(query);
 }
 
-void CSql::checkTemplateDB()
+void CSql::checkTemplateDB(string name)
 {
 	if (multiQuery)
 		setServerMultiStatementsOff();
@@ -281,7 +274,7 @@ void CSql::checkTemplateDB()
 		}
 	}
 	if (!dbExists) {
-		bool ret = createTemplateDB(true);
+		bool ret = createTemplateDB(name, true);
 		if (g_debugPrint && ret)
 			printf("[%s-debug] database [%s] successfully created.\n", g_progName, VIDEO_DB_TEMPLATE.c_str());
 	}
@@ -292,14 +285,14 @@ void CSql::checkTemplateDB()
 		setServerMultiStatementsOn();
 }
 
-bool CSql::createTemplateDB(bool quiet/* = false*/)
+bool CSql::createTemplateDB(string name, bool quiet/* = false*/)
 {
 	size_t size = 0;
 	const char* buf = NULL;
-	if (file_exists(g_templateDBFile.c_str())) {
-		FILE* f = fopen(g_templateDBFile.c_str(), "r");
+	if (file_exists(name.c_str())) {
+		FILE* f = fopen(name.c_str(), "r");
 		if (f != NULL) {
-			size = file_size(g_templateDBFile.c_str());
+			size = file_size(name.c_str());
 			buf = new char[size];
 			size = fread((void*)buf, size, 1, f);
 			fclose(f);
@@ -307,7 +300,7 @@ bool CSql::createTemplateDB(bool quiet/* = false*/)
 
 	}
 	if (size == 0) {
-		printf("\n[%s] error read database template [%s]\n", g_progName, g_templateDBFile.c_str());
+		printf("\n[%s] error read database template [%s]\n", g_progName, name.c_str());
 		if (buf != NULL)
 			delete [] buf;
 		exit(1);

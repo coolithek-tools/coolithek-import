@@ -20,8 +20,10 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.1"
+#define PROGVERSION "0.3.2"
 #define DBVERSION "3.0"
+
+#define DEFAULTXZ "mv-movielist.xz"
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -41,21 +43,19 @@
 #include "helpers.h"
 #include "filehelpers.h"
 #include "lzma_dec.h"
+#include "curl.h"
 
 #define DB_1 "-1.json"
 #define DB_2 "-2.json"
 
 GSettings		g_settings;
+bool			g_debugPrint;
 const char*		g_progName;
 const char*		g_progCopyright;
 const char*		g_progVersion;
 const char*		g_dbVersion;
-string			g_jsondb;
-string			g_xzName;
-string			g_templateDBFile;
 string			g_mvVersion;
-bool			g_debugPrint;
-vector<TVideoInfoEntry>	g_videoInfo;
+time_t			g_mvDate;
 
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
@@ -64,16 +64,19 @@ CMV2Mysql::CMV2Mysql()
 	g_progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
 	g_progVersion	= "v"PROGVERSION;
 	g_dbVersion	= DBVERSION;
+	defaultXZ	= (string)DEFAULTXZ;
 
-	epoch  = 180; /* 1/2 year*/
-	epochStd = false;
-	g_debugPrint = false;
-	multiQuery = true;
+	epoch		= 180; /* 1/2 year*/
+	epochStd	= false;
+	g_debugPrint	= false;
+	multiQuery	= true;
+	downloadOnly	= false;
+	g_mvDate	= time(0);
 }
 
 CMV2Mysql::~CMV2Mysql()
 {
-	g_videoInfo.clear();
+	videoInfo.clear();
 }
 
 CMV2Mysql* CMV2Mysql::getInstance()
@@ -98,18 +101,23 @@ void CMV2Mysql::printHelp()
 {
 	printHeader();
 	printCopyright();
-	printf("	-f | --file	   => Json file to parse\n");
-	printf("	-t | --template	   => Create template database\n");
-	printf("	-e | --epoch	   => Use not older entrys than 'epoch' days\n");
-	printf("			      (default 180 days)\n");
-	printf("	-s | --epoch-std   => Value of 'epoch' in hours (for debugging)\n");
-	printf("	-d | --debug-print => Print debug info\n");
-	printf("	-h | --help	   => Display this help screen and exit\n");
-	printf("	-v | --version	   => Display versions info and exit\n");
+	printf("  -f | --file		=> Movie list (.xz)\n");
+	printf("  -t | --template	=> Create template database\n");
+	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
+	printf("			   (default 180 days)\n");
+	printf("  -o | --download-only	=> Download only (Don't convert\n");
+	printf("			   to sql database).\n");
+	printf("       --save-config	=> Save config file and exit\n");
+	printf("\n");
+	printf("  -s | --epoch-std	=> Value of 'epoch' in hours (for debugging)\n");
+	printf("  -d | --debug-print	=> Print debug info\n");
+	printf("  -v | --version	=> Display versions info and exit\n");
+	printf("  -h | --help		=> Display this help screen and exit\n");
 }
 
 int CMV2Mysql::loadSetup(string fname)
 {
+	char cfg_key[128];
 	int erg = 0;
 	if (!configFile.loadConfig(fname.c_str()))
 		/* file not exist */
@@ -126,6 +134,17 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.videoDb_TableInfo	= configFile.getString("videoDb_TableInfo",    "channelinfo");
 	g_settings.videoDb_TableVersion	= configFile.getString("videoDb_TableVersion", "version");
 
+	int count			= configFile.getInt32("downloadServerCount", 8);
+	g_settings.downloadServerCount	= max(count, 1);
+	g_settings.downloadServerCount	= min(count, MAX_DL_SERVER_COUNT);
+	count				= configFile.getInt32("downloadServerWork", 1);
+	g_settings.downloadServerWork	= max(count, 1);
+	g_settings.downloadServerWork	= min(count, g_settings.downloadServerCount);
+	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
+		sprintf(cfg_key, "downloadServer_%02d", i);
+		g_settings.downloadServer[i] = configFile.getString(cfg_key, "-");
+	}
+
 	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
 	if (g_settings.testMode) {
 		VIDEO_DB_TMP_1	+= g_settings.testLabel;
@@ -138,6 +157,8 @@ int CMV2Mysql::loadSetup(string fname)
 
 void CMV2Mysql::saveSetup(string fname)
 {
+	char cfg_key[128];
+
 	configFile.setString("testLabel",            g_settings.testLabel);
 	configFile.setBool  ("testMode",             g_settings.testMode);
 
@@ -149,33 +170,26 @@ void CMV2Mysql::saveSetup(string fname)
 	configFile.setString("videoDb_TableInfo",    g_settings.videoDb_TableInfo);
 	configFile.setString("videoDb_TableVersion", g_settings.videoDb_TableVersion);
 
+	configFile.setInt32 ("downloadServerCount",  g_settings.downloadServerCount);
+	configFile.setInt32 ("downloadServerWork",   g_settings.downloadServerWork);
+	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
+		memset(cfg_key, 0, sizeof(cfg_key));
+		sprintf(cfg_key, "downloadServer_%02d", i);
+		configFile.setString(cfg_key, g_settings.downloadServer[i]);
+	}
+
 	if (configFile.getModifiedFlag())
 		configFile.saveConfig(fname.c_str());
 }
 
-void CMV2Mysql::setDbFileNames(string xz)
-{
-	string path0   = getPathName(xz);
-	path0          = getRealPath(path0);
-	string file0   = getBaseName(xz);
-	g_xzName       = path0 + "/" + file0;
-	g_jsondb       = workDir + "/" + getFileName(file0);
-}
-
 int CMV2Mysql::run(int argc, char *argv[])
 {
-	if (argc < 2) {
-		printHeader();
-		printf("\tType '%s --help' to print help screen\n", g_progName);
-		return 0;
-	}
-
 	/* set name for configFileName */
 	string arg0         = (string)argv[0];
 	string path0        = getPathName(arg0);
 	path0               = getRealPath(path0);
 	configFileName      = path0 + "/" + getBaseName(arg0) + ".conf";
-	g_templateDBFile    = path0 + "/sql/"+ "template.sql";
+	templateDBFile      = path0 + "/sql/"+ "template.sql";
 	workDir             = path0 + "/dl/work";
 	CFileHelpers cfh;
 	if (!cfh.createDir(workDir, 0755)) {
@@ -197,17 +211,19 @@ int CMV2Mysql::run(int argc, char *argv[])
 	int requiredParam = 1;
 //	int optionalParam = 2;
 	static struct option long_options[] = {
-		{"help",	noParam,       NULL, 'h'},
-		{"version",	noParam,       NULL, 'v'},
-		{"file",	requiredParam, NULL, 'f'},
-		{"template",	noParam,       NULL, 't'},
-		{"epoch",	requiredParam, NULL, 'e'},
-		{"epoch-std",   noParam,       NULL, 's'},
-		{"debug-print", noParam,       NULL, 'd'},
-		{NULL,		0, NULL, 0}
+		{"help",		noParam,       NULL, 'h'},
+		{"version",		noParam,       NULL, 'v'},
+		{"file",		requiredParam, NULL, 'f'},
+		{"template",		noParam,       NULL, 't'},
+		{"epoch",		requiredParam, NULL, 'e'},
+		{"save-config",		noParam,       NULL, '0'},
+		{"epoch-std",		noParam,       NULL, 's'},
+		{"debug-print",		noParam,       NULL, 'd'},
+		{"download-only",	noParam,       NULL, 'o'},
+		{NULL,		0,	NULL, 0}
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "h?vf:te:sd", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "h?vf:te:sdo0", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'h':
 			case '?':
@@ -222,7 +238,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 				break;
 			case 't':
 				csql->connectMysql();
-				csql->createTemplateDB();
+				csql->createTemplateDB(templateDBFile);
 				return 0;
 			case 'e':
 				epoch = atoi(optarg);
@@ -233,19 +249,136 @@ int CMV2Mysql::run(int argc, char *argv[])
 			case 'd':
 				g_debugPrint = true;
 				break;
+			case 'o':
+				downloadOnly = true;
+				break;
+			case '0':
+				configFile.setModifiedFlag(true);
+				saveSetup(configFileName);
+				return 0;
 			default:
 				break;
 		}
 	}
 
-	if (!openDB(g_jsondb))
+	if (!downloadDB())
+		return 1;
+	if (downloadOnly) {
+		CLZMAdec* xzDec = new CLZMAdec();
+		xzDec->decodeXZ(xzName, jsonDbName);
+		delete xzDec;
+		printf("[%s] download only (don't convert to sql database)\n", g_progName); fflush(stdout);
+		return 0;
+	}
+	if (!openDB(jsonDbName))
 		return 1;
 
 	csql->connectMysql();
-	csql->checkTemplateDB();
-	parseDB(g_jsondb);
+	csql->checkTemplateDB(templateDBFile);
+	parseDB(jsonDbName);
 
 	return 0;
+}
+
+void CMV2Mysql::setDbFileNames(string xz)
+{
+	string path0   = getPathName(xz);
+	path0          = getRealPath(path0);
+	string file0   = getBaseName(xz);
+	xzName         = path0 + "/" + file0;
+	jsonDbName     = workDir + "/" + getFileName(defaultXZ);
+}
+
+long CMV2Mysql::getDbVersion(string file)
+{
+	char buf[128];
+	memset(buf, 0, sizeof(buf));
+	FILE* f = fopen(file.c_str(), "r");
+	fread(buf, sizeof(buf)-1, 1, f);
+	fclose(f);
+
+	string str1 = (string)buf;
+	string search = "\"Filmliste\":";
+	size_t pos1 = str1.find(search);
+	if (pos1 != string::npos) {
+		str1 = str1.substr(pos1 + search.length());
+		pos1 = str1.find("\"");
+		size_t pos2 = str1.find("\"", pos1+1);
+		str1 = str1.substr(pos1+1, pos2-pos1-1);
+
+		/* 28.08.2017, 05:19 */
+		return str2time("%d.%m.%Y, %H:%M", str1);
+	}
+	return -1;
+}
+
+bool CMV2Mysql::downloadDB()
+{
+	if ((xzName.empty()) || (jsonDbName.empty())) {
+		string xz = getPathName(workDir) + "/" + defaultXZ;
+		setDbFileNames(xz);
+	}
+
+	bool versionOK    = true;
+	bool toFile       = true;
+	string agent      = "";
+	string url        = g_settings.downloadServer[g_settings.downloadServerWork];
+	string tmpXzOld   = getPathName(workDir) + "/tmp-old.xz";
+	string tmpXzNew   = getPathName(workDir) + "/tmp-new.xz";
+	string tmpJsonOld = getPathName(workDir) + "/tmp-old.json";
+	string tmpJsonNew = getPathName(workDir) + "/tmp-new.json";
+	CCurl* curl       = new CCurl();
+	if (file_exists(xzName.c_str())) {
+		/* check version */
+		char buf[16384];
+		FILE* f = fopen(xzName.c_str(), "r");
+		fread(buf, sizeof(buf), 1, f);
+		fclose(f);
+		f = fopen(tmpXzOld.c_str(), "w+");
+		fwrite(buf, sizeof(buf), 1, f);
+		fclose(f);
+
+		CLZMAdec* xzDec = new CLZMAdec();
+		xzDec->decodeXZ(tmpXzOld, tmpJsonOld, false);
+		long oldVersion = getDbVersion(tmpJsonOld);
+
+		const char* range = "0-16383";
+		curl->CurlDownload(url, tmpXzNew, toFile, agent, true, false, range);
+		xzDec->decodeXZ(tmpXzNew, tmpJsonNew, false);
+		long newVersion = getDbVersion(tmpJsonNew);
+
+		delete xzDec;
+	
+		if ((oldVersion != -1) && (newVersion != -1)) {
+			if (newVersion > oldVersion)
+				versionOK = false;
+		}
+		else
+			versionOK = false;
+	}
+	CFileHelpers cfh;
+	cfh.removeDir(workDir.c_str());
+	cfh.createDir(workDir, 0755);
+	unlink(tmpXzOld.c_str());
+	unlink(tmpXzNew.c_str());
+	unlink(tmpJsonOld.c_str());
+	unlink(tmpJsonNew.c_str());
+
+	if (!versionOK) {
+		const char* range = NULL;
+		printf("[%s] movie list is not up-to-date.\n", g_progName); fflush(stdout);
+		const char* cs = (g_settings.downloadServer[g_settings.downloadServerWork]).c_str();
+		printf("[%s] current download is: %s.\n", g_progName, cs); fflush(stdout);
+		printf("[%s] curl download %s ...", g_progName, url.c_str()); fflush(stdout);
+		curl->CurlDownload(url, xzName, toFile, agent, true, false, range);
+		printf("done.\n"); fflush(stdout);
+	}
+	else
+		printf("[%s] movie list is up-to-date, no download.\n", g_progName); fflush(stdout);
+
+	delete curl;
+
+	return true;
 }
 
 void CMV2Mysql::convertDB(string db)
@@ -302,11 +435,8 @@ void CMV2Mysql::convertDB(string db)
 bool CMV2Mysql::openDB(string db)
 {
 	CLZMAdec* xzDec = new CLZMAdec();
-	if (xzDec != NULL) {
-		xzDec->decodeXZ(g_xzName, g_jsondb);
-		delete xzDec;
-	}
-
+	xzDec->decodeXZ(xzName, jsonDbName);
+	delete xzDec;
 
 	convertDB(db);
 
@@ -417,9 +547,10 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	for (unsigned int i = 0; i < root.size(); ++i) {
-
 		if (i == 0) {		/* head 1 */
 			data = root[i].get("Filmliste", "");
+			string tmp  = data[1].asString();
+			g_mvDate    = str2time("%d.%m.%Y, %H:%M", tmp);
 			g_mvVersion = data[3].asString();
 		}
 		else if (i == 1) {	/* head 2 */
@@ -431,7 +562,7 @@ bool CMV2Mysql::parseDB(string db)
 			videoEntry.channel		= data[0].asString();
 			if ((videoEntry.channel != "") && (videoEntry.channel != cName)) {
 				if (cName != "") {
-					g_videoInfo.push_back(videoInfoEntry);
+					videoInfo.push_back(videoInfoEntry);
 				}
 				cName = videoEntry.channel;
 				cCount = 0;
@@ -518,8 +649,8 @@ bool CMV2Mysql::parseDB(string db)
 		printf("\n");
 	}
 
-	g_videoInfo.push_back(videoInfoEntry);
-	string itq = csql->createInfoTableQuery(entrys);
+	videoInfo.push_back(videoInfoEntry);
+	string itq = csql->createInfoTableQuery(&videoInfo, entrys);
 	csql->executeMultiQueryString(itq);
 
 	if (!g_debugPrint)

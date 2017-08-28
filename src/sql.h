@@ -81,12 +81,12 @@ class CSql
 		bool connectMysql();
 
 		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
-		string createInfoTableQuery(int size);
+		string createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size);
 		bool executeSingleQueryString__(string query, const char* func, int line);
 		bool executeMultiQueryString__(string query, const char* func, int line);
 		bool createVideoDbFromTemplate(string name);
-		void checkTemplateDB();
-		bool createTemplateDB(bool quiet = false);
+		void checkTemplateDB(string name);
+		bool createTemplateDB(string name, bool quiet = false);
 		bool renameDB();
 		void setServerMultiStatementsOff__(const char* func, int line);
 		void setServerMultiStatementsOn__(const char* func, int line);

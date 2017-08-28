@@ -66,6 +66,8 @@ typedef struct VideoInfoEntry
 	int    oldest;
 } TVideoInfoEntry;
 
+#define MAX_DL_SERVER_COUNT 32
+
 struct GSettings
 {
 	string videoDbBaseName;
@@ -75,6 +77,10 @@ struct GSettings
 	string videoDb_TableVideo;
 	string videoDb_TableInfo;
 	string videoDb_TableVersion;
+
+	string downloadServer[MAX_DL_SERVER_COUNT];
+	int    downloadServerCount;
+	int    downloadServerWork;
 
 	string testLabel;
 	bool   testMode;
@@ -95,12 +101,20 @@ class CMV2Mysql
 		bool epochStd;
 		string configFileName;
 		CConfigFile configFile;
+		bool downloadOnly;
+		string defaultXZ;
 
+		string	jsonDbName;
+		string	xzName;
+		string	templateDBFile;
+		vector<TVideoInfoEntry> videoInfo;
 		string VIDEO_DB_TMP_1;
 
 		void printHeader();
 		void printCopyright();
 		void printHelp();
+		long getDbVersion(string file);
+		bool downloadDB();
 		void convertDB(string db);
 		bool openDB(string db);
 		bool parseDB(string db);
