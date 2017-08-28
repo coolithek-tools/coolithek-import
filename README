@@ -10,12 +10,6 @@ Required:
     - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.2/tools/x86_64/libmariadb3-3.0.2-1001.0.1.x86_64.rpm
     - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.2/tools/x86_64/libmariadb-devel-3.0.2-1001.0.1.x86_64.rpm
   - libjsoncpp
-  - libpthread
-  - libssl
-  - libcrypto
-  - libz
-  - llzma
-
-
-
+  - liblzma
+  - libcurl
 
