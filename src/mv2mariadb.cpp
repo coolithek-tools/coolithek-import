@@ -94,17 +94,11 @@ void CMV2Mysql::Init()
 
 CMV2Mysql::~CMV2Mysql()
 {
+	configFile.setModifiedFlag(true);
+	saveSetup(configFileName, true);
 	videoInfo.clear();
 	if (csql != NULL)
 		delete csql;
-}
-
-CMV2Mysql* CMV2Mysql::getInstance()
-{
-	static CMV2Mysql* instance = NULL;
-	if (!instance)
-		instance = new CMV2Mysql();
-	return instance;
 }
 
 void CMV2Mysql::printHeader()
@@ -181,7 +175,7 @@ int CMV2Mysql::loadSetup(string fname)
 	return erg;
 }
 
-void CMV2Mysql::saveSetup(string fname)
+void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 {
 	char cfg_key[128];
 
@@ -211,7 +205,7 @@ void CMV2Mysql::saveSetup(string fname)
 	configFile.setString("passwordFile",         g_settings.passwordFile);
 
 	if (configFile.getModifiedFlag())
-		configFile.saveConfig(fname.c_str());
+		configFile.saveConfig(fname.c_str(), '=', quiet);
 }
 
 int CMV2Mysql::run(int argc, char *argv[])
@@ -790,5 +784,9 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 
 int main(int argc, char *argv[])
 {
-	return CMV2Mysql::getInstance()->run(argc, argv);
+//	return CMV2Mysql::getInstance()->run(argc, argv);
+	CMV2Mysql* mainInstance = new CMV2Mysql();
+	int ret = mainInstance->run(argc, argv);
+	delete mainInstance;
+	return ret;
 }

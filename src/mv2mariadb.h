@@ -131,13 +131,12 @@ class CMV2Mysql
 		string convertUrl(string url1, string url2);
 
 		int loadSetup(string fname);
-		void saveSetup(string fname);
+		void saveSetup(string fname, bool quiet = false);
 		void setDbFileNames(string xz);
 
 	public:
 		CMV2Mysql();
 		~CMV2Mysql();
-		static CMV2Mysql* getInstance();
 		int run(int argc, char *argv[]);
 };
 
