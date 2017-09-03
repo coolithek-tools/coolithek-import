@@ -70,6 +70,11 @@ typedef struct VideoInfoEntry
 
 struct GSettings
 {
+	/* test mode */
+	string testLabel;
+	bool   testMode;
+
+	/* database */
 	string videoDbBaseName;
 	string videoDb;
 	string videoDbTmp1;
@@ -78,12 +83,13 @@ struct GSettings
 	string videoDb_TableInfo;
 	string videoDb_TableVersion;
 
+	/* download server */
 	string downloadServer[MAX_DL_SERVER_COUNT];
 	int    downloadServerCount;
 	int    downloadServerWork;
 
-	string testLabel;
-	bool   testMode;
+	/* password file */
+	string passwordFile;
 };
 
 class CSql;

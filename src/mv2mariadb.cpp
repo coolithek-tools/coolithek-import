@@ -102,12 +102,13 @@ void CMV2Mysql::printHelp()
 	printHeader();
 	printCopyright();
 	printf("  -f | --file		=> Movie list (.xz)\n");
-	printf("  -t | --template	=> Create template database\n");
 	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
 	printf("			   (default 180 days)\n");
-	printf("  -o | --download-only	=> Download only (Don't convert\n");
+	printf("       --update		=> Create new config file and\n");
+	printf("			   new template database, then exit.\n");
+	printf("       --download-only	=> Download only (Don't convert\n");
 	printf("			   to sql database).\n");
-	printf("       --save-config	=> Save config file and exit\n");
+
 	printf("\n");
 	printf("  -s | --epoch-std	=> Value of 'epoch' in hours (for debugging)\n");
 	printf("  -d | --debug-print	=> Print debug info\n");
@@ -123,9 +124,11 @@ int CMV2Mysql::loadSetup(string fname)
 		/* file not exist */
 		erg = 1;
 
+	/* test mode */
 	g_settings.testLabel		= configFile.getString("testLabel",            "_TEST");
 	g_settings.testMode		= configFile.getBool  ("testMode",             true);
 
+	/* database */
 	g_settings.videoDbBaseName	= configFile.getString("videoDbBaseName",      "mediathek_1");
 	g_settings.videoDb		= configFile.getString("videoDb",              g_settings.videoDbBaseName);
 	g_settings.videoDbTmp1		= configFile.getString("videoDbTmp1",          g_settings.videoDbBaseName + "_tmp1");
@@ -133,8 +136,13 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.videoDb_TableVideo	= configFile.getString("videoDb_TableVideo",   "video");
 	g_settings.videoDb_TableInfo	= configFile.getString("videoDb_TableInfo",    "channelinfo");
 	g_settings.videoDb_TableVersion	= configFile.getString("videoDb_TableVersion", "version");
+	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
+	if (g_settings.testMode) {
+		VIDEO_DB_TMP_1	+= g_settings.testLabel;
+	}
 
-	int count			= configFile.getInt32("downloadServerCount", 8);
+	/* download server */
+	int count			= configFile.getInt32("downloadServerCount", 1);
 	g_settings.downloadServerCount	= max(count, 1);
 	g_settings.downloadServerCount	= min(count, MAX_DL_SERVER_COUNT);
 	count				= configFile.getInt32("downloadServerWork", 1);
@@ -142,13 +150,12 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.downloadServerWork	= min(count, g_settings.downloadServerCount);
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
 		sprintf(cfg_key, "downloadServer_%02d", i);
-		g_settings.downloadServer[i] = configFile.getString(cfg_key, "-");
+//		g_settings.downloadServer[i] = configFile.getString(cfg_key, "XYZ");
+		g_settings.downloadServer[i] = configFile.getString(cfg_key, "http://localhost/mediathek/Filmliste-akt.xz");
 	}
 
-	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
-	if (g_settings.testMode) {
-		VIDEO_DB_TMP_1	+= g_settings.testLabel;
-	}
+	/* password file */
+	g_settings.passwordFile	= configFile.getString("passwordFile",   "pw_mariadb");
 
 	if (erg)
 		configFile.setModifiedFlag(true);
@@ -159,9 +166,11 @@ void CMV2Mysql::saveSetup(string fname)
 {
 	char cfg_key[128];
 
+	/* test mode */
 	configFile.setString("testLabel",            g_settings.testLabel);
 	configFile.setBool  ("testMode",             g_settings.testMode);
 
+	/* database */
 	configFile.setString("videoDbBaseName",      g_settings.videoDbBaseName);
 	configFile.setString("videoDb",              g_settings.videoDb);
 	configFile.setString("videoDbTmp1",          g_settings.videoDbTmp1);
@@ -170,6 +179,7 @@ void CMV2Mysql::saveSetup(string fname)
 	configFile.setString("videoDb_TableInfo",    g_settings.videoDb_TableInfo);
 	configFile.setString("videoDb_TableVersion", g_settings.videoDb_TableVersion);
 
+	/* download server */
 	configFile.setInt32 ("downloadServerCount",  g_settings.downloadServerCount);
 	configFile.setInt32 ("downloadServerWork",   g_settings.downloadServerWork);
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
@@ -177,6 +187,9 @@ void CMV2Mysql::saveSetup(string fname)
 		sprintf(cfg_key, "downloadServer_%02d", i);
 		configFile.setString(cfg_key, g_settings.downloadServer[i]);
 	}
+
+	/* password file */
+	configFile.setString("passwordFile",         g_settings.passwordFile);
 
 	if (configFile.getModifiedFlag())
 		configFile.saveConfig(fname.c_str());
@@ -211,51 +224,51 @@ int CMV2Mysql::run(int argc, char *argv[])
 	int requiredParam = 1;
 //	int optionalParam = 2;
 	static struct option long_options[] = {
-		{"help",		noParam,       NULL, 'h'},
-		{"version",		noParam,       NULL, 'v'},
 		{"file",		requiredParam, NULL, 'f'},
-		{"template",		noParam,       NULL, 't'},
 		{"epoch",		requiredParam, NULL, 'e'},
-		{"save-config",		noParam,       NULL, '0'},
+		{"update",		noParam,       NULL, '1'},
+		{"download-only",	noParam,       NULL, '2'},
 		{"epoch-std",		noParam,       NULL, 's'},
 		{"debug-print",		noParam,       NULL, 'd'},
-		{"download-only",	noParam,       NULL, 'o'},
-		{NULL,		0,	NULL, 0}
+		{"version",		noParam,       NULL, 'v'},
+		{"help",		noParam,       NULL, 'h'},
+		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "h?vf:te:sdo0", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "f:e:12sdvh?", long_options, &c)) >= 0) {
+//	while ((opt = getopt_long(argc, argv, "h?vf:e:sdo0", long_options, &c)) >= 0) {
 		switch (opt) {
-			case 'h':
-			case '?':
-				printHelp();
-				return (opt == '?') ? -1 : 0;
-			case 'v':
-				printHeader();
-				printCopyright();
-				return 0;
 			case 'f':
 				setDbFileNames(string(optarg));
 				break;
-			case 't':
-				csql->connectMysql();
-				csql->createTemplateDB(templateDBFile);
-				return 0;
 			case 'e':
 				epoch = atoi(optarg);
 				break;
+			case '1':
+				configFile.setModifiedFlag(true);
+				unlink(configFileName.c_str());
+				saveSetup(configFileName);
+				csql->connectMysql();
+				csql->createTemplateDB(templateDBFile);
+				return 0;
+			case '2':
+				downloadOnly = true;
+				break;
+
 			case 's':
 				epochStd = true;
 				break;
 			case 'd':
 				g_debugPrint = true;
 				break;
-			case 'o':
-				downloadOnly = true;
-				break;
-			case '0':
-				configFile.setModifiedFlag(true);
-				saveSetup(configFileName);
+			case 'v':
+				printHeader();
+				printCopyright();
 				return 0;
+			case 'h':
+			case '?':
+				printHelp();
+				return (opt == '?') ? -1 : 0;
 			default:
 				break;
 		}

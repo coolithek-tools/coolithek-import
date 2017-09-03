@@ -92,9 +92,9 @@ void CSql::show_error(const char* func, int line)
 
 bool CSql::connectMysql()
 {
-	FILE* f = fopen("pw_conv.txt", "r");
+	FILE* f = fopen(g_settings.passwordFile.c_str(), "r");
 	if (f == NULL) {
-		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, "pw_conv.txt");
+		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, g_settings.passwordFile.c_str());
 		exit(1);
 	}
 	char buf[256];
