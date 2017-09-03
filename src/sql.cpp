@@ -306,7 +306,18 @@ bool CSql::createTemplateDB(string name, bool quiet/* = false*/)
 
 bool CSql::renameDB()
 {
-	return renameDatabase(VIDEO_DB_TMP_1, VIDEO_DB, dbDefaultCharacterSet);
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("[%s] rename temporary database...", g_progName); fflush(stdout);
+
+	bool ret = renameDatabase(VIDEO_DB_TMP_1, VIDEO_DB, dbDefaultCharacterSet);
+
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
+
+	return ret;
 }
 
 void CSql::setServerMultiStatementsOff__(const char* func, int line)
