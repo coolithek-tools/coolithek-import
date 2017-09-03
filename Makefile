@@ -2,7 +2,12 @@
 ###  Makefile mv2mariadb
 ###
 
-DEBUG = 1
+## (optional) private definitions for DEBUG, EXTRA_CFLAGS, DESTDIR
+-include priv-settings.mk
+
+DEBUG        ?= 0
+EXTRA_CFLAGS ?=
+DESTDIR      ?= /usr/local
 
 CC	 = g++
 STRIP	 = strip
@@ -14,10 +19,10 @@ else
 CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -Wl,-O3 -pipe -fno-strict-aliasing
 endif
 CFLAGS   += -fmax-errors=10
+CFLAGS   += $(EXTRA_CFLAGS)
 
 LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma -lcurl
 LDFLAGS  = $(LIBS)
-DESTDIR  = /usr/local
 
 ifeq ($(DEBUG), 1)
 all: clean mv2mariadb

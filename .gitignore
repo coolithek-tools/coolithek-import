@@ -1,8 +1,8 @@
 pw_mariadb
-mv2mysql
 mv2mariadb
 mv2mariadb.conf
 zz*.sh
 *.log
 *.diff
 *.patch
+priv-settings.mk
