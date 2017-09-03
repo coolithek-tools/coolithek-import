@@ -71,7 +71,7 @@ void CMV2Mysql::Init()
 	g_dbVersion	= DBVERSION;
 	defaultXZ	= (string)DEFAULTXZ;
 
-	epoch		= 180; /* 1/2 year*/
+	epoch		= 0; /* all data */
 	g_debugPrint	= false;
 	multiQuery	= true;
 	downloadOnly	= false;
@@ -110,7 +110,7 @@ void CMV2Mysql::printHelp()
 	printCopyright();
 	printf("  -f | --file		=> Movie list (.xz)\n");
 	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
-	printf("			   (default 180 days)\n");
+	printf("			   (default all data)\n");
 	printf("       --update		=> Create new config file and\n");
 	printf("			   new template database, then exit.\n");
 	printf("       --download-only	=> Download only (Don't convert\n");
@@ -246,7 +246,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 				setDbFileNames(string(optarg));
 				break;
 			case 'e':
-				epoch = atoi(optarg);
+				/* >=0 and <=24800 */
+				epoch = max(min(atoi(optarg), 24800), 0);
 				break;
 			case '1':
 				configFile.setModifiedFlag(true);
@@ -548,6 +549,7 @@ bool CMV2Mysql::parseDB(string db)
 	string vQuery = "";
 	uint32_t writeLen = 0;
 	bool writeStart = true;
+	uint32_t maxWriteLen = 1048576-4096;		/* 1MB */
 
 	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
 	csql->setUsedDatabase(VIDEO_DB_TMP_1);
@@ -611,8 +613,8 @@ bool CMV2Mysql::parseDB(string db)
 			if ((videoEntry.date_unix == 0) && (data[3].asString() != "") && (data[4].asString() != "")) {
 				videoEntry.date_unix = str2time("%d.%m.%Y %H:%M:%S", data[3].asString() + " " + data[4].asString());
 			}
-			if (videoEntry.date_unix > 0) {
-				time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default 180) */
+			if ((videoEntry.date_unix > 0) && (epoch > 0)) {
+				time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default all data) */
 				if (videoEntry.date_unix < (nowTime - maxDiff))
 					continue;
 			}
@@ -639,7 +641,6 @@ bool CMV2Mysql::parseDB(string db)
 			vQuery = csql->createVideoTableQuery(entrys, writeStart, &videoEntry);
 			writeStart = false;
 
-			uint32_t maxWriteLen = 1048576;		/* 1MB */
 			if ((writeLen + vQuery.length()) >= maxWriteLen) {
 				sqlBuff += ";\n";
 				csql->executeSingleQueryString(sqlBuff);
@@ -678,7 +679,8 @@ bool CMV2Mysql::parseDB(string db)
 
 	csql->renameDB();
 
-	printf("[%s] all tasks done (%u (%d days) / %u entrys)\n", g_progName, entrys, epoch, (uint32_t)(root.size()-2));
+	string days_s = (epoch > 0) ? to_string(epoch) + " days" : "all data";
+	printf("[%s] all tasks done (%u (%s) / %u entrys)\n", g_progName, entrys, days_s.c_str(), (uint32_t)(root.size()-2));
 	gettimeofday(&t1, NULL);
 	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
