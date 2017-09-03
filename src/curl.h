@@ -63,6 +63,7 @@ class CCurl
 			   	 bool silent=false,
 				 bool verbose=false,
 		  		 const char* range=NULL,
+				 bool noDisplayHttpError=false,
 				 bool passHeader=false,
 			   	 string postfields="",
 			   	 int connectTimeout=20,

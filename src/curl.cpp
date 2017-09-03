@@ -114,6 +114,7 @@ int CCurl::CurlDownload(string url,
 			bool silent/*=false*/,
 			bool verbose/*=false*/,
 			const char* range/*=NULL*/,
+			bool noDisplayHttpError/*=false*/,
 			bool passHeader/*=false*/,
 			string postfields/*=""*/,
 			int connectTimeout/*=20*/,
@@ -295,9 +296,14 @@ int CCurl::CurlDownload(string url,
 		fclose(fp);
 
 	if (ret != 0) {
-		memset(errMsg, '\0', sizeof(errMsg));
-		snprintf(errMsg, sizeof(errMsg)-1, "%s", cerror);
-		printf("%s curl error: %s\n", CURL_MSG_ERROR, errMsg);
+		if (! ((  (ret == CURLE_HTTP_RETURNED_ERROR)  ||
+			  (ret == CURLE_COULDNT_RESOLVE_HOST) ||
+			  (ret == CURLE_COULDNT_CONNECT)
+		       ) && noDisplayHttpError) ) {
+			memset(errMsg, '\0', sizeof(errMsg));
+			snprintf(errMsg, sizeof(errMsg)-1, "%s", cerror);
+			printf("%s curl error: %s - %d\n", CURL_MSG_ERROR, errMsg, ret);
+		}
 		if (outputToFile)
 			unlink(output.c_str());
 		return PRIV_CURL_ERR_CURL;
