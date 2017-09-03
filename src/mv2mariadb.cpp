@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.3"
+#define PROGVERSION "0.3.4"
 #define DBVERSION "3.0"
 
 #define DEFAULTXZ "mv-movielist.xz"
@@ -426,6 +426,8 @@ bool CMV2Mysql::downloadDB(string url)
 			delete xzDec;
 			return false;
 		}
+		if (!g_debugPrint)
+			printf("[%s] version check %s\n", g_progName, url.c_str());
 		xzDec->decodeXZ(tmpXzNew, tmpJsonNew, false);
 		long newVersion = getDbVersion(tmpJsonNew);
 		delete xzDec;
@@ -452,14 +454,13 @@ bool CMV2Mysql::downloadDB(string url)
 		printf("\n");
 	if (!versionOK) {
 		const char* range = NULL;
-		printf("[%s] movie list is not up-to-date.\n", g_progName); fflush(stdout);
-		printf("[%s] curl download %s ...", g_progName, url.c_str()); fflush(stdout);
 		ret = curl->CurlDownload(url, xzName, toFile, userAgentDownload, true, false, range, true);
 		if (ret != 0) {
 			delete curl;
 			return false;
 		}
-		printf("done.\n"); fflush(stdout);
+		printf("[%s] movie list is not up-to-date.\n", g_progName);
+		printf("[%s] curl download %s\n", g_progName, url.c_str()); fflush(stdout);
 	}
 	else
 		printf("[%s] movie list is up-to-date, no download.\n", g_progName); fflush(stdout);
