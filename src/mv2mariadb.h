@@ -104,7 +104,6 @@ class CMV2Mysql
 		string jsonBuf;
 		string workDir;
 		int epoch;
-		bool epochStd;
 		string configFileName;
 		CConfigFile configFile;
 		bool downloadOnly;
@@ -116,6 +115,7 @@ class CMV2Mysql
 		vector<TVideoInfoEntry> videoInfo;
 		string VIDEO_DB_TMP_1;
 
+		void Init();
 		void printHeader();
 		void printCopyright();
 		void printHelp();

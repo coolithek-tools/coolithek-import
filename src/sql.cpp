@@ -47,6 +47,11 @@ extern bool			g_debugPrint;
 
 CSql::CSql()
 {
+	Init();
+}
+
+void CSql::Init()
+{
 	VIDEO_DB			= g_settings.videoDb;
 	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
 	VIDEO_DB_TEMPLATE		= g_settings.videoDbTemplate;
@@ -59,8 +64,9 @@ CSql::CSql()
 	INFO_TABLE			= g_settings.videoDb_TableInfo;
 	VERSION_TABLE			= g_settings.videoDb_TableVersion;
 
-	multiQuery = true;
-	mysqlCon = NULL;
+	multiQuery			= true;
+	mysqlCon			= NULL;
+	dbDefaultCharacterSet		= "DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci";
 }
 
 CSql::~CSql()
@@ -68,14 +74,6 @@ CSql::~CSql()
 	if (mysqlCon != NULL) {
 		mysql_close(mysqlCon);
 	}
-}
-
-CSql* CSql::getInstance()
-{
-	static CSql* instance = NULL;
-	if (!instance)
-		instance = new CSql();
-	return instance;
 }
 
 void CSql::show_error(const char* func, int line)
@@ -242,14 +240,7 @@ bool CSql::executeMultiQueryString__(string query, const char* func, int line)
 
 bool CSql::createVideoDbFromTemplate(string name)
 {
-	string query = "DROP DATABASE IF EXISTS `" + name +"`;";
-	query += "CREATE DATABASE IF NOT EXISTS `" + name + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
-	query += "CREATE TABLE " + name + "." + VIDEO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VIDEO_TABLE + ";";
-	query += "CREATE TABLE " + name + "." + INFO_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + INFO_TABLE + ";";
-	query += "CREATE TABLE " + name + "." + VERSION_TABLE + " LIKE " + VIDEO_DB_TEMPLATE + "." + VERSION_TABLE + ";";
-	query += "USE `" + name + "`;";
-
-	return executeMultiQueryString(query);
+	return copyDatabase(VIDEO_DB_TEMPLATE, name, dbDefaultCharacterSet, true/* no data */);
 }
 
 void CSql::checkTemplateDB(string name)
@@ -257,29 +248,15 @@ void CSql::checkTemplateDB(string name)
 	if (multiQuery)
 		setServerMultiStatementsOff();
 
-	string sql = "SHOW DATABASES;";
-	executeSingleQueryString(sql);
+	bool dbExists = databaseExists(VIDEO_DB_TEMPLATE);
+	if (dbExists && g_debugPrint)
+		printf("[%s-debug] check i.o., database [%s] exists.\n", g_progName, VIDEO_DB_TEMPLATE.c_str());
 
-	MYSQL_RES* result = mysql_store_result(mysqlCon);
-	MYSQL_ROW row;
-	bool dbExists = false;
-	while ((row = mysql_fetch_row(result)))
-	{
-		if (VIDEO_DB_TEMPLATE == (string)row[0]) {
-			if (g_debugPrint)
-				printf("[%s-debug] check i.o., database [%s] exists.\n", g_progName, VIDEO_DB_TEMPLATE.c_str());
-			
-			dbExists = true;
-			break;
-		}
-	}
 	if (!dbExists) {
 		bool ret = createTemplateDB(name, true);
 		if (g_debugPrint && ret)
 			printf("[%s-debug] database [%s] successfully created.\n", g_progName, VIDEO_DB_TEMPLATE.c_str());
 	}
-
-	mysql_free_result(result);
 
 	if (multiQuery)
 		setServerMultiStatementsOn();
@@ -325,28 +302,7 @@ bool CSql::createTemplateDB(string name, bool quiet/* = false*/)
 
 bool CSql::renameDB()
 {
-	struct timeval t1;
-	gettimeofday(&t1, NULL);
-	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	printf("[%s] rename temporary database...", g_progName); fflush(stdout);
-
-	string query = "";
-	query += "START TRANSACTION;";
-	query += "SET autocommit = 0;";
-	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB +"`;";
-	query += "CREATE DATABASE IF NOT EXISTS `" + VIDEO_DB + "` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VIDEO_TABLE + " TO " + VIDEO_DB + "." + VIDEO_TABLE + ";";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + INFO_TABLE + " TO " + VIDEO_DB + "." + INFO_TABLE + ";";
-	query += "RENAME TABLE " + VIDEO_DB_TMP_1 + "." + VERSION_TABLE + " TO " + VIDEO_DB + "." + VERSION_TABLE + ";";
-	query += "DROP DATABASE IF EXISTS `" + VIDEO_DB_TMP_1 +"`;";
-	query += "COMMIT;";
-	bool ret = executeMultiQueryString(query);
-
-	gettimeofday(&t1, NULL);
-	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
-
-	return ret;
+	return renameDatabase(VIDEO_DB_TMP_1, VIDEO_DB, dbDefaultCharacterSet);
 }
 
 void CSql::setServerMultiStatementsOff__(const char* func, int line)
@@ -360,3 +316,6 @@ void CSql::setServerMultiStatementsOn__(const char* func, int line)
 	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
 		show_error(func, line);
 }
+
+/* TODO: Separate class for shared sql functions */
+#include "sql-common.cpp"

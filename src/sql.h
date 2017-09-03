@@ -46,7 +46,14 @@ using namespace std;
 class CSql
 {
 	private:
+		enum {
+			db_mode_copy,
+			db_mode_rename
+		};
+
 		MYSQL *mysqlCon;
+
+		string dbDefaultCharacterSet;
 
 		string VIDEO_DB;
 		string VIDEO_DB_TMP_1;
@@ -58,6 +65,7 @@ class CSql
 		string sqlUser;
 		string sqlPW;
 
+		void Init();
 		void show_error(const char* func, int line);
 		char checkStringBuff[0xFFFF];
 		inline string checkString(string& str, int size) {
@@ -71,13 +79,11 @@ class CSql
 		}
 		inline string checkInt(int i) { return to_string(i); }
 
-
 	public:
 		bool multiQuery;
 
 		CSql();
 		~CSql();
-		static CSql* getInstance();
 		bool connectMysql();
 
 		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
@@ -90,6 +96,19 @@ class CSql
 		bool renameDB();
 		void setServerMultiStatementsOff__(const char* func, int line);
 		void setServerMultiStatementsOn__(const char* func, int line);
+		string getDefaultCharacterSet() { return dbDefaultCharacterSet; };
+
+	/* sql-common.cpp */
+	/* TODO: Separate class for shared sql functions */
+	private:
+		bool intCopyOrRenameDatabase(string fromDB, string toDB, string characterSet, int mode, bool noData=false);
+
+	public:
+		bool databaseExists(string db);
+		string getUsedDatabase();
+		void setUsedDatabase(string db);
+		bool copyDatabase(string fromDB, string toDB, string characterSet, bool noData=false);
+		bool renameDatabase(string fromDB, string toDB, string characterSet);
 };
 
 #endif // __SQL_H__

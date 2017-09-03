@@ -60,6 +60,11 @@ time_t			g_mvDate;
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
 {
+	Init();
+}
+
+void CMV2Mysql::Init()
+{
 	g_progName	= "mv2mariadb";
 	g_progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
 	g_progVersion	= "v"PROGVERSION;
@@ -67,16 +72,18 @@ CMV2Mysql::CMV2Mysql()
 	defaultXZ	= (string)DEFAULTXZ;
 
 	epoch		= 180; /* 1/2 year*/
-	epochStd	= false;
 	g_debugPrint	= false;
 	multiQuery	= true;
 	downloadOnly	= false;
 	g_mvDate	= time(0);
+	csql		= NULL;
 }
 
 CMV2Mysql::~CMV2Mysql()
 {
 	videoInfo.clear();
+	if (csql != NULL)
+		delete csql;
 }
 
 CMV2Mysql* CMV2Mysql::getInstance()
@@ -110,7 +117,6 @@ void CMV2Mysql::printHelp()
 	printf("			   to sql database).\n");
 
 	printf("\n");
-	printf("  -s | --epoch-std	=> Value of 'epoch' in hours (for debugging)\n");
 	printf("  -d | --debug-print	=> Print debug info\n");
 	printf("  -v | --version	=> Display versions info and exit\n");
 	printf("  -h | --help		=> Display this help screen and exit\n");
@@ -217,7 +223,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		saveSetup(configFileName);
 	}
 
-	csql = CSql::getInstance();
+	csql = new CSql();
 	multiQuery = csql->multiQuery;
 
 	int noParam       = 0;
@@ -228,15 +234,13 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"epoch",		requiredParam, NULL, 'e'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
-		{"epoch-std",		noParam,       NULL, 's'},
 		{"debug-print",		noParam,       NULL, 'd'},
 		{"version",		noParam,       NULL, 'v'},
 		{"help",		noParam,       NULL, 'h'},
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "f:e:12sdvh?", long_options, &c)) >= 0) {
-//	while ((opt = getopt_long(argc, argv, "h?vf:e:sdo0", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "f:e:12dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'f':
 				setDbFileNames(string(optarg));
@@ -253,10 +257,6 @@ int CMV2Mysql::run(int argc, char *argv[])
 				return 0;
 			case '2':
 				downloadOnly = true;
-				break;
-
-			case 's':
-				epochStd = true;
 				break;
 			case 'd':
 				g_debugPrint = true;
@@ -550,6 +550,7 @@ bool CMV2Mysql::parseDB(string db)
 	bool writeStart = true;
 
 	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
+	csql->setUsedDatabase(VIDEO_DB_TMP_1);
 
 	string sqlBuff = "";
 	if (multiQuery)
@@ -612,8 +613,6 @@ bool CMV2Mysql::parseDB(string db)
 			}
 			if (videoEntry.date_unix > 0) {
 				time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default 180) */
-				if (epochStd)
-					maxDiff /= 24;
 				if (videoEntry.date_unix < (nowTime - maxDiff))
 					continue;
 			}
@@ -679,7 +678,7 @@ bool CMV2Mysql::parseDB(string db)
 
 	csql->renameDB();
 
-	printf("[%s] all tasks done (%u (%d %s) / %u entrys)\n", g_progName, entrys, epoch, (epochStd)?"std":"days", (uint32_t)(root.size()-2));
+	printf("[%s] all tasks done (%u (%d days) / %u entrys)\n", g_progName, entrys, epoch, (uint32_t)(root.size()-2));
 	gettimeofday(&t1, NULL);
 	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
