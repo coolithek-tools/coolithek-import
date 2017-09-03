@@ -356,6 +356,9 @@ bool CMV2Mysql::downloadDB()
 		else
 			versionOK = false;
 	}
+	else
+		versionOK = false;
+
 	CFileHelpers cfh;
 	cfh.removeDir(workDir.c_str());
 	cfh.createDir(workDir, 0755);

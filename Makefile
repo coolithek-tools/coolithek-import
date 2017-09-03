@@ -2,7 +2,7 @@
 ###  Makefile mv2mariadb
 ###
 
-##DEBUG = 1
+DEBUG = 1
 
 CC	 = g++
 STRIP	 = strip
