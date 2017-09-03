@@ -44,6 +44,7 @@ extern const char*		g_dbVersion;
 extern string			g_mvVersion;
 extern time_t			g_mvDate;
 extern bool			g_debugPrint;
+extern string			g_passwordFile;
 
 CSql::CSql()
 {
@@ -90,15 +91,18 @@ void CSql::show_error(const char* func, int line)
 
 bool CSql::connectMysql()
 {
-	FILE* f = fopen(g_settings.passwordFile.c_str(), "r");
+	FILE* f = NULL;
+	if (file_exists(g_passwordFile.c_str()))
+		f = fopen(g_passwordFile.c_str(), "r");
 	if (f == NULL) {
-		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, g_settings.passwordFile.c_str());
+		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, g_passwordFile.c_str());
 		exit(1);
 	}
 	char buf[256];
 	fgets(buf, sizeof(buf), f);
 	fclose(f);
 	string pw = buf;
+	pw = trim(pw);
 	vector<string> v = split(pw, ':');
 	sqlUser = v[0];
 	sqlPW   = v[1];

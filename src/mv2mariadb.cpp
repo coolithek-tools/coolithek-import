@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.2"
+#define PROGVERSION "0.3.3"
 #define DBVERSION "3.0"
 
 #define DEFAULTXZ "mv-movielist.xz"
@@ -56,6 +56,7 @@ const char*		g_progVersion;
 const char*		g_dbVersion;
 string			g_mvVersion;
 time_t			g_mvDate;
+string			g_passwordFile;
 
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
@@ -222,6 +223,12 @@ int CMV2Mysql::run(int argc, char *argv[])
 		configFile.setModifiedFlag(true);
 		saveSetup(configFileName);
 	}
+
+	/* set name for passwordFile */
+	if ((g_settings.passwordFile)[0] == '/')
+		g_passwordFile = g_settings.passwordFile;
+	else
+		g_passwordFile = path0 + "/" + g_settings.passwordFile;
 
 	csql = new CSql();
 	multiQuery = csql->multiQuery;
