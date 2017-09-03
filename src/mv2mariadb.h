@@ -114,13 +114,17 @@ class CMV2Mysql
 		string	templateDBFile;
 		vector<TVideoInfoEntry> videoInfo;
 		string VIDEO_DB_TMP_1;
+		string userAgentCheck;
+		string userAgentDownload;
 
 		void Init();
 		void printHeader();
 		void printCopyright();
 		void printHelp();
 		long getDbVersion(string file);
-		bool downloadDB();
+		bool checkNumberList(vector<uint32_t>* numberList, uint32_t number);
+		bool getDownloadUrlList();
+		bool downloadDB(string url);
 		void convertDB(string db);
 		bool openDB(string db);
 		bool parseDB(string db);

@@ -99,7 +99,7 @@ bool CSql::intCopyOrRenameDatabase(string fromDB, string toDB, string characterS
 	query += "START TRANSACTION;";
 	query += "SET autocommit = 0;";
 	query += "DROP DATABASE IF EXISTS `" + toDB + "`;";
-	query += "CREATE DATABASE IF NOT EXISTS `" + toDB + "`  " + characterSet + ";";
+	query += "CREATE DATABASE IF NOT EXISTS `" + toDB + "` " + characterSet + ";";
 	/* copy tables */
 	if (mode == db_mode_copy) {
 		for (size_t i = 0; i < tablesList.size(); i++) {

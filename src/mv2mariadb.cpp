@@ -78,6 +78,18 @@ void CMV2Mysql::Init()
 	downloadOnly	= false;
 	g_mvDate	= time(0);
 	csql		= NULL;
+
+#ifdef PRIV_USERAGENT
+	string agentTmp1	= "MediathekView data to sql - ";
+	string agentTmp2a	= "versionscheck ";
+	string agentTmp2b	= "downloader ";
+	string agentTmp3	= "(" + (string)g_progName + "/" + (string)PROGVERSION + ", curl/" + (string)LIBCURL_VERSION + ")";
+	userAgentCheck		= agentTmp1 + agentTmp2a + agentTmp3;
+	userAgentDownload	= agentTmp1 + agentTmp2b + agentTmp3;
+#else
+	userAgentCheck		= "";
+	userAgentDownload	= "";
+#endif
 }
 
 CMV2Mysql::~CMV2Mysql()
@@ -204,6 +216,9 @@ void CMV2Mysql::saveSetup(string fname)
 
 int CMV2Mysql::run(int argc, char *argv[])
 {
+	/* Initialization random number generator */
+	srand((uint32_t)time(0));
+
 	/* set name for configFileName */
 	string arg0         = (string)argv[0];
 	string path0        = getPathName(arg0);
@@ -282,7 +297,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		}
 	}
 
-	if (!downloadDB())
+	if (!getDownloadUrlList())
 		return 1;
 	if (downloadOnly) {
 		CLZMAdec* xzDec = new CLZMAdec();
@@ -333,7 +348,55 @@ long CMV2Mysql::getDbVersion(string file)
 	return -1;
 }
 
-bool CMV2Mysql::downloadDB()
+bool CMV2Mysql::checkNumberList(vector<uint32_t>* numberList, uint32_t number)
+{
+	if (numberList->empty())
+		return false;
+	for (vector<uint32_t>::iterator it = numberList->begin(); it != numberList->end(); ++it) {
+		if ((uint32_t)(it[0]) == number)
+			return true;
+	}
+	return false;
+}
+
+bool CMV2Mysql::getDownloadUrlList()
+{
+	uint32_t randStart  = 1;
+	uint32_t randEnd    = g_settings.downloadServerCount - 1;
+	uint32_t whileCount = 0;
+	uint32_t randValue;
+	vector<uint32_t> numberList;
+
+	while (true) {
+		randValue = (rand() % ((randEnd + 1) - randStart)) + randStart;
+		if (!checkNumberList(&numberList, randValue))
+			numberList.push_back(randValue);
+		if (numberList.size() >= randEnd)
+			break;
+
+		/* fallback for random error */
+		whileCount++;
+		if (whileCount >= randEnd*100)
+			break;
+	}
+
+	for (uint32_t i = 0; i < numberList.size(); i++) {
+		string dlServer = g_settings.downloadServer[numberList[i]];
+		if (g_debugPrint)
+			printf("[%s-debug] check %s", g_progName, dlServer.c_str());
+		if (downloadDB(dlServer)) {
+			g_settings.downloadServerWork = numberList[i];
+			return true;
+		}
+		else {
+			if (g_debugPrint)
+				printf(" ERROR\n");
+		}
+	}
+	return false;
+}
+
+bool CMV2Mysql::downloadDB(string url)
 {
 	if ((xzName.empty()) || (jsonDbName.empty())) {
 		string xz = getPathName(workDir) + "/" + defaultXZ;
@@ -342,13 +405,12 @@ bool CMV2Mysql::downloadDB()
 
 	bool versionOK    = true;
 	bool toFile       = true;
-	string agent      = "";
-	string url        = g_settings.downloadServer[g_settings.downloadServerWork];
 	string tmpXzOld   = getPathName(workDir) + "/tmp-old.xz";
 	string tmpXzNew   = getPathName(workDir) + "/tmp-new.xz";
 	string tmpJsonOld = getPathName(workDir) + "/tmp-old.json";
 	string tmpJsonNew = getPathName(workDir) + "/tmp-new.json";
 	CCurl* curl       = new CCurl();
+	int ret;
 	if (file_exists(xzName.c_str())) {
 		/* check version */
 		char buf[16384];
@@ -364,10 +426,14 @@ bool CMV2Mysql::downloadDB()
 		long oldVersion = getDbVersion(tmpJsonOld);
 
 		const char* range = "0-16383";
-		curl->CurlDownload(url, tmpXzNew, toFile, agent, true, false, range);
+		ret = curl->CurlDownload(url, tmpXzNew, toFile, userAgentCheck, true, false, range, true);
+		if (ret != 0) {
+			delete curl;
+			delete xzDec;
+			return false;
+		}
 		xzDec->decodeXZ(tmpXzNew, tmpJsonNew, false);
 		long newVersion = getDbVersion(tmpJsonNew);
-
 		delete xzDec;
 	
 		if ((oldVersion != -1) && (newVersion != -1)) {
@@ -388,20 +454,23 @@ bool CMV2Mysql::downloadDB()
 	unlink(tmpJsonOld.c_str());
 	unlink(tmpJsonNew.c_str());
 
+	if (g_debugPrint)
+		printf("\n");
 	if (!versionOK) {
 		const char* range = NULL;
 		printf("[%s] movie list is not up-to-date.\n", g_progName); fflush(stdout);
-		const char* cs = (g_settings.downloadServer[g_settings.downloadServerWork]).c_str();
-		printf("[%s] current download is: %s.\n", g_progName, cs); fflush(stdout);
 		printf("[%s] curl download %s ...", g_progName, url.c_str()); fflush(stdout);
-		curl->CurlDownload(url, xzName, toFile, agent, true, false, range);
+		ret = curl->CurlDownload(url, xzName, toFile, userAgentDownload, true, false, range, true);
+		if (ret != 0) {
+			delete curl;
+			return false;
+		}
 		printf("done.\n"); fflush(stdout);
 	}
 	else
 		printf("[%s] movie list is up-to-date, no download.\n", g_progName); fflush(stdout);
 
 	delete curl;
-
 	return true;
 }
 
