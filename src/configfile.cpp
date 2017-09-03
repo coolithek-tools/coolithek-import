@@ -89,7 +89,7 @@ bool CConfigFile::loadConfig(const std::string & filename, char _delimiter)
 	return loadConfig(filename.c_str(), _delimiter);
 }
 
-bool CConfigFile::saveConfig(const char * const filename, char _delimiter)
+bool CConfigFile::saveConfig(const char * const filename, char _delimiter, bool quiet)
 {
 	std::string tmpname = std::string(filename) + ".tmp";
 	unlink(tmpname.c_str());
@@ -97,7 +97,8 @@ bool CConfigFile::saveConfig(const char * const filename, char _delimiter)
 
 	if (configFile.good())
 	{
-		std::cout << "[ConfigFile] saving " << filename << std::endl;
+		if (!quiet)
+			std::cout << "[ConfigFile] saving " << filename << std::endl;
 		for (ConfigDataMap::const_iterator it = configData.begin(); it != configData.end(); ++it)
 		{
 			configFile << it->first << _delimiter << it->second << std::endl;
@@ -121,9 +122,9 @@ bool CConfigFile::saveConfig(const char * const filename, char _delimiter)
 	}
 }
 
-bool CConfigFile::saveConfig(const std::string & filename, char _delimiter)
+bool CConfigFile::saveConfig(const std::string & filename, char _delimiter, bool quiet)
 {
-	return saveConfig(filename.c_str(), _delimiter);
+	return saveConfig(filename.c_str(), _delimiter, quiet);
 }
 
 

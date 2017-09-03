@@ -51,8 +51,8 @@ class CConfigFile
 	bool loadConfig(const char * const filename, char _delimiter = '=');
 	bool loadConfig(const std::string & filename, char _delimiter = '=');
 
-	bool saveConfig(const char * const filename, char _delimiter = '=');
-	bool saveConfig(const std::string & filename, char _delimiter = '=');
+	bool saveConfig(const char * const filename, char _delimiter = '=', bool quiet = false);
+	bool saveConfig(const std::string & filename, char _delimiter = '=', bool quiet = false);
 
 	void clear();
 
