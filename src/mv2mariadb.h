@@ -108,6 +108,8 @@ class CMV2Mysql
 		CConfigFile configFile;
 		bool downloadOnly;
 		string defaultXZ;
+		bool convertData;
+		bool forceConvertData;
 
 		string	jsonDbName;
 		string	xzName;
@@ -124,6 +126,7 @@ class CMV2Mysql
 		long getDbVersion(string file);
 		bool checkNumberList(vector<uint32_t>* numberList, uint32_t number);
 		bool getDownloadUrlList();
+		long getVersionFromXZ(string xz_, string json_);
 		bool downloadDB(string url);
 		void convertDB(string db);
 		bool openDB(string db);

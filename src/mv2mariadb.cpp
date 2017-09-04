@@ -66,18 +66,20 @@ CMV2Mysql::CMV2Mysql()
 
 void CMV2Mysql::Init()
 {
-	g_progName	= "mv2mariadb";
-	g_progCopyright	= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
-	g_progVersion	= "v"PROGVERSION;
-	g_dbVersion	= DBVERSION;
-	defaultXZ	= (string)DEFAULTXZ;
+	g_progName		= "mv2mariadb";
+	g_progCopyright		= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
+	g_progVersion		= "v"PROGVERSION;
+	g_dbVersion		= DBVERSION;
+	defaultXZ		= (string)DEFAULTXZ;
 
-	epoch		= 0; /* all data */
-	g_debugPrint	= false;
-	multiQuery	= true;
-	downloadOnly	= false;
-	g_mvDate	= time(0);
-	csql		= NULL;
+	epoch			= 0; /* all data */
+	g_debugPrint		= false;
+	multiQuery		= true;
+	downloadOnly		= false;
+	g_mvDate		= time(0);
+	csql			= NULL;
+	convertData		= true;
+	forceConvertData	= false;
 
 #ifdef PRIV_USERAGENT
 	string agentTmp1	= "MediathekView data to sql - ";
@@ -118,6 +120,8 @@ void CMV2Mysql::printHelp()
 	printf("  -f | --file		=> Movie list (.xz)\n");
 	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
 	printf("			   (default all data)\n");
+	printf("  -c | --force-convert	=> Data also convert, when\n");
+	printf("			   movie list is up-to-date.\n");
 	printf("       --update		=> Create new config file and\n");
 	printf("			   new template database, then exit.\n");
 	printf("       --download-only	=> Download only (Don't convert\n");
@@ -248,6 +252,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 	static struct option long_options[] = {
 		{"file",		requiredParam, NULL, 'f'},
 		{"epoch",		requiredParam, NULL, 'e'},
+		{"force-convert",	noParam,       NULL, 'c'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
 		{"debug-print",		noParam,       NULL, 'd'},
@@ -256,7 +261,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "f:e:12dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "f:e:c12dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'f':
 				setDbFileNames(string(optarg));
@@ -264,6 +269,9 @@ int CMV2Mysql::run(int argc, char *argv[])
 			case 'e':
 				/* >=0 and <=24800 */
 				epoch = max(min(atoi(optarg), 24800), 0);
+				break;
+			case 'c':
+				forceConvertData = true;
 				break;
 			case '1':
 				configFile.setModifiedFlag(true);
@@ -293,7 +301,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 
 	if (!getDownloadUrlList())
 		return 1;
-	if (downloadOnly) {
+	if (downloadOnly || !convertData) {
 		CLZMAdec* xzDec = new CLZMAdec();
 		xzDec->decodeXZ(xzName, jsonDbName);
 		delete xzDec;
@@ -390,6 +398,22 @@ bool CMV2Mysql::getDownloadUrlList()
 	return false;
 }
 
+long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
+{
+	char buf[16384];
+	FILE* f = fopen(xzName.c_str(), "r");
+	fread(buf, sizeof(buf), 1, f);
+	fclose(f);
+	f = fopen(xz_.c_str(), "w+");
+	fwrite(buf, sizeof(buf), 1, f);
+	fclose(f);
+
+	CLZMAdec* xzDec = new CLZMAdec();
+	xzDec->decodeXZ(xz_, json_, false);
+	delete xzDec;
+	return getDbVersion(json_);
+}
+
 bool CMV2Mysql::downloadDB(string url)
 {
 	if ((xzName.empty()) || (jsonDbName.empty())) {
@@ -405,29 +429,19 @@ bool CMV2Mysql::downloadDB(string url)
 	string tmpJsonNew = getPathName(workDir) + "/tmp-new.json";
 	CCurl* curl       = new CCurl();
 	int ret;
+
 	if (file_exists(xzName.c_str())) {
 		/* check version */
-		char buf[16384];
-		FILE* f = fopen(xzName.c_str(), "r");
-		fread(buf, sizeof(buf), 1, f);
-		fclose(f);
-		f = fopen(tmpXzOld.c_str(), "w+");
-		fwrite(buf, sizeof(buf), 1, f);
-		fclose(f);
-
-		CLZMAdec* xzDec = new CLZMAdec();
-		xzDec->decodeXZ(tmpXzOld, tmpJsonOld, false);
-		long oldVersion = getDbVersion(tmpJsonOld);
-
+		long oldVersion = getVersionFromXZ(tmpXzOld, tmpJsonOld);
 		const char* range = "0-16383";
 		ret = curl->CurlDownload(url, tmpXzNew, toFile, userAgentCheck, true, false, range, true);
 		if (ret != 0) {
 			delete curl;
-			delete xzDec;
 			return false;
 		}
 		if (!g_debugPrint)
 			printf("[%s] version check %s\n", g_progName, url.c_str());
+		CLZMAdec* xzDec = new CLZMAdec();
 		xzDec->decodeXZ(tmpXzNew, tmpJsonNew, false);
 		long newVersion = getDbVersion(tmpJsonNew);
 		delete xzDec;
@@ -442,6 +456,8 @@ bool CMV2Mysql::downloadDB(string url)
 	else
 		versionOK = false;
 
+	convertData = (forceConvertData) ? true : !versionOK;
+
 	CFileHelpers cfh;
 	cfh.removeDir(workDir.c_str());
 	cfh.createDir(workDir, 0755);
@@ -450,8 +466,6 @@ bool CMV2Mysql::downloadDB(string url)
 	unlink(tmpJsonOld.c_str());
 	unlink(tmpJsonNew.c_str());
 
-	if (g_debugPrint)
-		printf("\n");
 	if (!versionOK) {
 		const char* range = NULL;
 		ret = curl->CurlDownload(url, xzName, toFile, userAgentDownload, true, false, range, true);
@@ -459,11 +473,28 @@ bool CMV2Mysql::downloadDB(string url)
 			delete curl;
 			return false;
 		}
+		if (g_debugPrint)
+			printf("\n");
 		printf("[%s] movie list is not up-to-date.\n", g_progName);
-		printf("[%s] curl download %s\n", g_progName, url.c_str()); fflush(stdout);
+		printf("[%s] curl download %s\n", g_progName, url.c_str());
 	}
-	else
-		printf("[%s] movie list is up-to-date, no download.\n", g_progName); fflush(stdout);
+	else {
+		if (g_debugPrint)
+			printf("\n");
+		printf("[%s] movie list is up-to-date, no download.\n", g_progName);
+	}
+
+	/* get version */
+	long newVersion = getVersionFromXZ(tmpXzNew, tmpJsonNew);
+	unlink(tmpXzNew.c_str());
+	unlink(tmpJsonNew.c_str());
+
+	newVersion -= 7200;  /* FIX ME */
+	struct tm* locTime = localtime(&newVersion);
+	char buf[256];
+	memset(buf, 0, sizeof(buf));
+	strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", locTime);
+	printf("[%s] movie list version: %s\n", g_progName, buf); fflush(stdout);
 
 	delete curl;
 	return true;
