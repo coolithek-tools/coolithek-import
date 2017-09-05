@@ -305,7 +305,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 		CLZMAdec* xzDec = new CLZMAdec();
 		xzDec->decodeXZ(xzName, jsonDbName);
 		delete xzDec;
-		printf("[%s] download only (don't convert to sql database)\n", g_progName); fflush(stdout);
+		const char* msg = (downloadOnly) ? "download only" : "no changes";
+		printf("[%s] %s, don't convert to sql database\n", g_progName, msg); fflush(stdout);
 		return 0;
 	}
 	if (!openDB(jsonDbName))
@@ -475,13 +476,13 @@ bool CMV2Mysql::downloadDB(string url)
 		}
 		if (g_debugPrint)
 			printf("\n");
-		printf("[%s] movie list is not up-to-date.\n", g_progName);
+		printf("[%s] movie list has been changed\n", g_progName);
 		printf("[%s] curl download %s\n", g_progName, url.c_str());
 	}
 	else {
 		if (g_debugPrint)
 			printf("\n");
-		printf("[%s] movie list is up-to-date, no download.\n", g_progName);
+		printf("[%s] movie list is up-to-date, don't download\n", g_progName);
 	}
 
 	/* get version */
@@ -489,11 +490,10 @@ bool CMV2Mysql::downloadDB(string url)
 	unlink(tmpXzNew.c_str());
 	unlink(tmpJsonNew.c_str());
 
-	newVersion -= 7200;  /* FIX ME */
-	struct tm* locTime = localtime(&newVersion);
+	struct tm* versionTime = gmtime(&newVersion);
 	char buf[256];
 	memset(buf, 0, sizeof(buf));
-	strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", locTime);
+	strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", versionTime);
 	printf("[%s] movie list version: %s\n", g_progName, buf); fflush(stdout);
 
 	delete curl;
@@ -816,7 +816,6 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 
 int main(int argc, char *argv[])
 {
-//	return CMV2Mysql::getInstance()->run(argc, argv);
 	CMV2Mysql* mainInstance = new CMV2Mysql();
 	int ret = mainInstance->run(argc, argv);
 	delete mainInstance;
