@@ -117,10 +117,9 @@ void CMV2Mysql::printHelp()
 {
 	printHeader();
 	printCopyright();
-	printf("  -f | --file		=> Movie list (.xz)\n");
 	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
 	printf("			   (default all data)\n");
-	printf("  -c | --force-convert	=> Data also convert, when\n");
+	printf("  -f | --force-convert	=> Data also convert, when\n");
 	printf("			   movie list is up-to-date.\n");
 	printf("       --update		=> Create new config file and\n");
 	printf("			   new template database, then exit.\n");
@@ -250,9 +249,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 	int requiredParam = 1;
 //	int optionalParam = 2;
 	static struct option long_options[] = {
-		{"file",		requiredParam, NULL, 'f'},
 		{"epoch",		requiredParam, NULL, 'e'},
-		{"force-convert",	noParam,       NULL, 'c'},
+		{"force-convert",	noParam,       NULL, 'f'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
 		{"debug-print",		noParam,       NULL, 'd'},
@@ -261,16 +259,13 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "f:e:c12dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "e:f12dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
-			case 'f':
-				setDbFileNames(string(optarg));
-				break;
 			case 'e':
 				/* >=0 and <=24800 */
 				epoch = max(min(atoi(optarg), 24800), 0);
 				break;
-			case 'c':
+			case 'f':
 				forceConvertData = true;
 				break;
 			case '1':
