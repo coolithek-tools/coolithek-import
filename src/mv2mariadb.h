@@ -105,6 +105,8 @@ class CMV2Mysql
 		string jsonBuf;
 		string workDir;
 		int epoch;
+		int cronMode;
+		bool cronModeEcho;
 		string configFileName;
 		CConfigFile configFile;
 		bool downloadOnly;

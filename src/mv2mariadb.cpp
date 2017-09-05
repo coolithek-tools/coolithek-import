@@ -73,6 +73,8 @@ void CMV2Mysql::Init()
 	defaultXZ		= (string)DEFAULTXZ;
 
 	epoch			= 0; /* all data */
+	cronMode		= 0;
+	cronModeEcho		= false;
 	g_debugPrint		= false;
 	multiQuery		= true;
 	downloadOnly		= false;
@@ -111,25 +113,6 @@ void CMV2Mysql::printHeader()
 void CMV2Mysql::printCopyright()
 {
 	printf("%s\n", g_progCopyright);
-}
-
-void CMV2Mysql::printHelp()
-{
-	printHeader();
-	printCopyright();
-	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
-	printf("			   (default all data)\n");
-	printf("  -f | --force-convert	=> Data also convert, when\n");
-	printf("			   movie list is up-to-date.\n");
-	printf("       --update		=> Create new config file and\n");
-	printf("			   new template database, then exit.\n");
-	printf("       --download-only	=> Download only (Don't convert\n");
-	printf("			   to sql database).\n");
-
-	printf("\n");
-	printf("  -d | --debug-print	=> Print debug info\n");
-	printf("  -v | --version	=> Display versions info and exit\n");
-	printf("  -h | --help		=> Display this help screen and exit\n");
 }
 
 int CMV2Mysql::loadSetup(string fname)
@@ -212,6 +195,30 @@ void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 		configFile.saveConfig(fname.c_str(), '=', quiet);
 }
 
+void CMV2Mysql::printHelp()
+{
+	printHeader();
+	printCopyright();
+	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
+	printf("			   (default all data)\n");
+	printf("  -f | --force-convert	=> Data also convert, when\n");
+	printf("			   movie list is up-to-date.\n");
+	printf("  -c | --cron-mode	=> Time in minutes. Specifies the period during\n");
+	printf("			   which no new version check is performed\n");
+	printf("			   after the last download.\n");
+	printf("  -C | --cron-mode-echo	=> Output message during --cron-mode to the log\n");
+	printf("			   (Default: no output)\n");
+	printf("       --update		=> Create new config file and\n");
+	printf("			   new template database, then exit.\n");
+	printf("       --download-only	=> Download only (Don't convert\n");
+	printf("			   to sql database).\n");
+
+	printf("\n");
+	printf("  -d | --debug-print	=> Print debug info\n");
+	printf("  -v | --version	=> Display versions info and exit\n");
+	printf("  -h | --help		=> Display this help screen and exit\n");
+}
+
 int CMV2Mysql::run(int argc, char *argv[])
 {
 	/* Initialization random number generator */
@@ -252,6 +259,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 	static struct option long_options[] = {
 		{"epoch",		requiredParam, NULL, 'e'},
 		{"force-convert",	noParam,       NULL, 'f'},
+		{"cron-mode",		requiredParam, NULL, 'c'},
+		{"cron-mode-echo",	noParam,       NULL, 'C'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
 		{"debug-print",		noParam,       NULL, 'd'},
@@ -260,7 +269,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "e:f12dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "e:fc:C12dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'e':
 				/* >=0 and <=24800 */
@@ -268,6 +277,13 @@ int CMV2Mysql::run(int argc, char *argv[])
 				break;
 			case 'f':
 				forceConvertData = true;
+				break;
+			case 'c':
+				/* >=10 min. and <=600 min. */
+				cronMode = max(min(atoi(optarg), 600), 10);
+				break;
+			case 'C':
+				cronModeEcho = true;
 				break;
 			case '1':
 				configFile.setModifiedFlag(true);
@@ -292,6 +308,29 @@ int CMV2Mysql::run(int argc, char *argv[])
 				return (opt == '?') ? -1 : 0;
 			default:
 				break;
+		}
+	}
+
+	if (cronMode > 0) {
+		if ((time(0) - g_settings.lastDownloadTime) < (cronMode*60)) {
+			if (cronModeEcho) {
+				printf("[%s] The last download is recent enough.\n", g_progName);
+
+				char buf[256];
+				memset(buf, 0, sizeof(buf));
+				time_t tt = g_settings.lastDownloadTime;
+				struct tm* xTime = localtime(&tt);
+				strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", xTime);
+				printf("[%s] Time of  last download is %s\n", g_progName, buf);
+
+				memset(buf, 0, sizeof(buf));
+				tt = g_settings.lastDownloadTime + cronMode*60;
+				xTime = localtime(&tt);
+				strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", xTime);
+				printf("[%s] Next possible download is %s\n", g_progName, buf); fflush(stdout);
+			}
+			/* The last download is recent enough, exit. */
+			return 0;
 		}
 	}
 
