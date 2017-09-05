@@ -73,6 +73,10 @@ void CSql::Init()
 CSql::~CSql()
 {
 	if (mysqlCon != NULL) {
+		int maxAllowedPacket = 4194304;			// default
+		if (mysql_optionsv(mysqlCon, MYSQL_OPT_MAX_ALLOWED_PACKET, (const void*)(&maxAllowedPacket)) != 0)
+			show_error(__func__, __LINE__);
+
 		mysql_close(mysqlCon);
 	}
 }

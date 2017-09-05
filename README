@@ -6,10 +6,19 @@ mv2mariadb is a tool for convert mediathekview data (json format) to sql (mariad
 Required:
   - MariaDB Connector/C:
     - https://downloads.mariadb.com/Connectors/c/connector-c-3.0.2/
-        -- or for openSUSE --
+        -- or for openSUSE Leap 42.2 --
     - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.2/tools/x86_64/libmariadb3-3.0.2-1001.0.1.x86_64.rpm
     - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.2/tools/x86_64/libmariadb-devel-3.0.2-1001.0.1.x86_64.rpm
+        -- or for openSUSE Leap 42.3 --
+    - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.3/tools/x86_64/libmariadb3-3.0.2-1001.0.1.x86_64.rpm
+    - https://opensuse.tuxcode.de/repositories/tuxcode/privat/openSUSE_Leap_42.3/tools/x86_64/libmariadb-devel-3.0.2-1001.0.1.x86_64.rpm
   - libjsoncpp
   - liblzma
   - libcurl
 
+
+
+
+user agents for download:
+  - "MediathekView data to sql - versionscheck (mv2mariadb/0.3.5, curl/7.37.0)"
+  - "MediathekView data to sql - downloader (mv2mariadb/0.3.5, curl/7.37.0)"

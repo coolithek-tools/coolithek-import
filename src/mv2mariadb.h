@@ -113,6 +113,7 @@ class CMV2Mysql
 		string defaultXZ;
 		bool convertData;
 		bool forceConvertData;
+		uint32_t dlSegmentSize;
 
 		string	jsonDbName;
 		string	xzName;

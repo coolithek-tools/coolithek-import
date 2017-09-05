@@ -82,6 +82,7 @@ void CMV2Mysql::Init()
 	csql			= NULL;
 	convertData		= true;
 	forceConvertData	= false;
+	dlSegmentSize		= 8192;
 
 #ifdef PRIV_USERAGENT
 	string agentTmp1	= "MediathekView data to sql - ";
@@ -400,7 +401,7 @@ bool CMV2Mysql::checkNumberList(vector<uint32_t>* numberList, uint32_t number)
 bool CMV2Mysql::getDownloadUrlList()
 {
 	uint32_t randStart  = 1;
-	uint32_t randEnd    = g_settings.downloadServerCount - 1;
+	uint32_t randEnd    = g_settings.downloadServerCount;
 	uint32_t whileCount = 0;
 	uint32_t randValue;
 	vector<uint32_t> numberList;
@@ -431,12 +432,13 @@ bool CMV2Mysql::getDownloadUrlList()
 				printf(" ERROR\n");
 		}
 	}
+	printf("[%s] No download server found. ;-(\n", g_progName);
 	return false;
 }
 
 long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
 {
-	char buf[16384];
+	char buf[dlSegmentSize];
 	FILE* f = fopen(xzName.c_str(), "r");
 	fread(buf, sizeof(buf), 1, f);
 	fclose(f);
@@ -469,7 +471,8 @@ bool CMV2Mysql::downloadDB(string url)
 	if (file_exists(xzName.c_str())) {
 		/* check version */
 		long oldVersion = getVersionFromXZ(tmpXzOld, tmpJsonOld);
-		const char* range = "0-16383";
+		string range_ = (string)"0-" + to_string(dlSegmentSize-1);
+		const char* range = range_.c_str();
 		ret = curl->CurlDownload(url, tmpXzNew, toFile, userAgentCheck, true, false, range, true);
 		if (ret != 0) {
 			delete curl;
