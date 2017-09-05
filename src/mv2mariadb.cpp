@@ -161,13 +161,13 @@ int CMV2Mysql::loadSetup(string fname)
 	int count			= configFile.getInt32("downloadServerCount", 1);
 	g_settings.downloadServerCount	= max(count, 1);
 	g_settings.downloadServerCount	= min(count, MAX_DL_SERVER_COUNT);
-	count				= configFile.getInt32("downloadServerWork", 1);
-	g_settings.downloadServerWork	= max(count, 1);
-	g_settings.downloadServerWork	= min(count, g_settings.downloadServerCount);
+	count				= configFile.getInt32("lastDownloadServer", 1);
+	g_settings.lastDownloadServer	= max(count, 1);
+	g_settings.lastDownloadServer	= min(count, g_settings.downloadServerCount);
+	g_settings.lastDownloadTime	= (time_t)configFile.getInt64("lastDownloadTime", 0);
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
 		sprintf(cfg_key, "downloadServer_%02d", i);
-//		g_settings.downloadServer[i] = configFile.getString(cfg_key, "XYZ");
-		g_settings.downloadServer[i] = configFile.getString(cfg_key, "http://localhost/mediathek/Filmliste-akt.xz");
+		g_settings.downloadServer[i] = configFile.getString(cfg_key, "-");
 	}
 
 	/* password file */
@@ -197,7 +197,8 @@ void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 
 	/* download server */
 	configFile.setInt32 ("downloadServerCount",  g_settings.downloadServerCount);
-	configFile.setInt32 ("downloadServerWork",   g_settings.downloadServerWork);
+	configFile.setInt32 ("lastDownloadServer",   g_settings.lastDownloadServer);
+	configFile.setInt64 ("lastDownloadTime",     (int64_t)(g_settings.lastDownloadTime));
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
 		memset(cfg_key, 0, sizeof(cfg_key));
 		sprintf(cfg_key, "downloadServer_%02d", i);
@@ -383,7 +384,7 @@ bool CMV2Mysql::getDownloadUrlList()
 		if (g_debugPrint)
 			printf("[%s-debug] check %s", g_progName, dlServer.c_str());
 		if (downloadDB(dlServer)) {
-			g_settings.downloadServerWork = numberList[i];
+			g_settings.lastDownloadServer = numberList[i];
 			return true;
 		}
 		else {
@@ -473,6 +474,7 @@ bool CMV2Mysql::downloadDB(string url)
 			printf("\n");
 		printf("[%s] movie list has been changed\n", g_progName);
 		printf("[%s] curl download %s\n", g_progName, url.c_str());
+		g_settings.lastDownloadTime = time(0);
 	}
 	else {
 		if (g_debugPrint)

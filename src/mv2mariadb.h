@@ -86,7 +86,8 @@ struct GSettings
 	/* download server */
 	string downloadServer[MAX_DL_SERVER_COUNT];
 	int    downloadServerCount;
-	int    downloadServerWork;
+	int    lastDownloadServer;
+	time_t lastDownloadTime;
 
 	/* password file */
 	string passwordFile;
