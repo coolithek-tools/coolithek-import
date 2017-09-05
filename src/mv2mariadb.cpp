@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.4"
+#define PROGVERSION "0.3.5"
 #define DBVERSION "3.0"
 
 #define DEFAULTXZ "mv-movielist.xz"
@@ -687,7 +687,8 @@ bool CMV2Mysql::parseDB(string db)
 	string vQuery = "";
 	uint32_t writeLen = 0;
 	bool writeStart = true;
-	uint32_t maxWriteLen = 1048576-4096;		/* 1MB */
+	uint32_t maxWriteLen = 1048576-4096;  /* 1MB */
+	uint32_t skipUrl = 0;
 
 	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
 	csql->setUsedDatabase(VIDEO_DB_TMP_1);
@@ -747,6 +748,16 @@ bool CMV2Mysql::parseDB(string db)
 			videoEntry.url_hd		= convertUrl(videoEntry.url, data[14].asString());
 			videoEntry.url_rtmp_hd		= convertUrl(videoEntry.url, data[15].asString());
 
+			if ((videoEntry.url.empty())            &&
+			    (videoEntry.url_rtmp.empty())       &&
+			    (videoEntry.url_small.empty())      &&
+			    (videoEntry.url_rtmp_small.empty()) &&
+			    (videoEntry.url_hd.empty())         &&
+			    (videoEntry.url_rtmp_hd.empty())) {
+				skipUrl++;
+				continue;
+			}
+
 			videoEntry.date_unix		= atoi((data[16].asCString()));
 			if ((videoEntry.date_unix == 0) && (data[3].asString() != "") && (data[4].asString() != "")) {
 				videoEntry.date_unix = str2time("%d.%m.%Y %H:%M:%S", data[3].asString() + " " + data[4].asString());
@@ -772,7 +783,7 @@ bool CMV2Mysql::parseDB(string db)
 			entrys++;
 			if (g_debugPrint) {
 				if ((entrys % 32) == 0)
-					printf("[%s-debug] Processed entries: %d\r", g_progName, entrys);
+					printf("[%s-debug] Processed entries: %6d, skip (no url) %d\r", g_progName, entrys, skipUrl);
 				if ((entrys % 32*8) == 0)
 					fflush(stdout);
 			}
@@ -790,6 +801,9 @@ bool CMV2Mysql::parseDB(string db)
 			writeLen = sqlBuff.length();
 		}
 	}
+
+	if (g_debugPrint)
+		printf("[%s-debug] Processed entries: %6d, skip (no url) %d\r", g_progName, entrys, skipUrl); fflush(stdout);
 
 	if (!sqlBuff.empty()) {
 		csql->executeSingleQueryString(sqlBuff);
@@ -817,6 +831,8 @@ bool CMV2Mysql::parseDB(string db)
 
 	csql->renameDB();
 
+	if (skipUrl > 0)
+		printf("[%s] skiped entrys (no url) %d\n", g_progName, skipUrl);
 	string days_s = (epoch > 0) ? to_string(epoch) + " days" : "all data";
 	printf("[%s] all tasks done (%u (%s) / %u entrys)\n", g_progName, entrys, days_s.c_str(), (uint32_t)(root.size()-2));
 	gettimeofday(&t1, NULL);
