@@ -22,7 +22,7 @@
 
 #define PROGVERSION "0.3.5"
 #define DBVERSION "3.0"
-
+#define PROGNAME "mv2mariadb"
 #define DEFAULTXZ "mv-movielist.xz"
 
 #include <sys/types.h>
@@ -31,6 +31,8 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <libgen.h>
+#include <errno.h>
+#include <semaphore.h>
 
 #include <iostream>
 #include <fstream>
@@ -58,6 +60,8 @@ string			g_mvVersion;
 time_t			g_mvDate;
 string			g_passwordFile;
 
+void myExit(int val);
+
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
 {
@@ -66,7 +70,7 @@ CMV2Mysql::CMV2Mysql()
 
 void CMV2Mysql::Init()
 {
-	g_progName		= "mv2mariadb";
+	g_progName		= PROGNAME;
 	g_progCopyright		= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
 	g_progVersion		= "v"PROGVERSION;
 	g_dbVersion		= DBVERSION;
@@ -235,7 +239,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 	CFileHelpers cfh;
 	if (!cfh.createDir(workDir, 0755)) {
 		printf("Error: create dir %s\n", workDir.c_str());
-		exit(1);
+		myExit(1);
 	}
 
 	int loadSettingsErg = loadSetup(configFileName);
@@ -869,10 +873,44 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 	return ret;
 }
 
+const char* mySEMID = PROGNAME "_SEMID";
+sem_t* mySemHandle = NULL;
+
+void myExit(int val)
+{
+	/* Remove semaphore */
+	if (mySemHandle != NULL)
+		sem_close(mySemHandle);
+	if (sem_unlink(mySEMID))
+		perror(mySEMID);
+
+	/* exit program */
+	exit(val);
+}
+
 int main(int argc, char *argv[])
 {
+	/* Create semaphore to correctly identify
+	 * the program to prevent multiple instances. */
+	mySemHandle = sem_open(mySEMID, O_CREAT|O_EXCL);
+	if (mySemHandle == SEM_FAILED) {
+		if (errno == EEXIST)
+			printf("[%s] An instance of '%s' is already running, this exits.\n", PROGNAME, PROGNAME);
+		else
+			perror(mySEMID);
+		return 1;
+	}
+
+	/* main prog */
 	CMV2Mysql* mainInstance = new CMV2Mysql();
 	int ret = mainInstance->run(argc, argv);
 	delete mainInstance;
+
+	/* Remove semaphore */
+	if (mySemHandle != NULL)
+		sem_close(mySemHandle);
+	if (sem_unlink(mySEMID))
+		perror(mySEMID);
+
 	return ret;
 }

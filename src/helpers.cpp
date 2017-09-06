@@ -15,6 +15,8 @@
 
 #include "helpers.h"
 
+extern void myExit(int val);
+
 time_t duration2time(string t)
 {
 	struct tm tm;
@@ -155,7 +157,7 @@ string getRealPath(string &path)
 	const char* ret = realpath(path.c_str(), buf);
 	if (ret == NULL) {
 		printf("[%s] Error: path %s not exists.\n", __func__, path.c_str());
-		exit(1);
+		myExit(1);
 	}
 	return (string)ret;
 }

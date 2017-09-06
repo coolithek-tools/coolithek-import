@@ -46,6 +46,8 @@ extern time_t			g_mvDate;
 extern bool			g_debugPrint;
 extern string			g_passwordFile;
 
+extern void myExit(int val);
+
 CSql::CSql()
 {
 	Init();
@@ -90,7 +92,7 @@ void CSql::show_error(const char* func, int line)
 					    mysql_error(mysqlCon));
 	mysql_close(mysqlCon);
 	mysqlCon = NULL;
-	exit(-1);
+	myExit(-1);
 }
 
 bool CSql::connectMysql()
@@ -100,7 +102,7 @@ bool CSql::connectMysql()
 		f = fopen(g_passwordFile.c_str(), "r");
 	if (f == NULL) {
 		printf("#### [%s:%d] error opening pw file: %s\n", __func__, __LINE__, g_passwordFile.c_str());
-		exit(1);
+		myExit(1);
 	}
 	char buf[256];
 	fgets(buf, sizeof(buf), f);
@@ -210,7 +212,7 @@ bool CSql::executeMultiQueryString__(string query, const char* func, int line)
 {
 	if (!multiQuery) {
 		printf("[%s:%d] No multiple statement execution support.\n", func, line);
-		exit(1);
+		myExit(1);
 	}
 	setServerMultiStatementsOn();
 
@@ -288,7 +290,7 @@ bool CSql::createTemplateDB(string name, bool quiet/* = false*/)
 		printf("\n[%s] error read database template [%s]\n", g_progName, name.c_str());
 		if (buf != NULL)
 			delete [] buf;
-		exit(1);
+		myExit(1);
 	}
 	string sql = (string)buf;
 	delete [] buf;

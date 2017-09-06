@@ -21,7 +21,7 @@ endif
 CFLAGS   += -fmax-errors=10
 CFLAGS   += $(EXTRA_CFLAGS)
 
-LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma -lcurl
+LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma -lcurl -lpthread
 LDFLAGS  = $(LIBS)
 
 ifeq ($(DEBUG), 1)

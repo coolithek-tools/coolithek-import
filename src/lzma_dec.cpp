@@ -16,6 +16,8 @@
 
 #include "lzma_dec.h"
 
+extern void myExit(int val);
+
 CLZMAdec::CLZMAdec()
 {
 	noLzmaBufError = false;
@@ -245,18 +247,18 @@ int CLZMAdec::decodeXZ(string inFile, string outFile, bool printBufError/*=true*
 
 	if (!init_decoder(&strm))
 		// Decoder initialization failed.
-		exit(1);
+		myExit(1);
 
 	FILE *infile = fopen(inFile.c_str(), "rb");
 	if (infile == NULL) {
 		fprintf(stderr, "%s: Error opening the input file: %s\n", inFile.c_str(), strerror(errno));
-		exit(1);
+		myExit(1);
 	}
 	FILE *outfile = fopen(outFile.c_str(), "w+");
 	if (outfile == NULL) {
 		fprintf(stderr, "%s: Error opening the output file: %s\n", outFile.c_str(), strerror(errno));
 		fclose(infile);
-		exit(1);
+		myExit(1);
 	}
 
 	bool ret = decompress(&strm, inFile.c_str(), infile, outfile);
