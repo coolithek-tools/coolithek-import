@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.5"
+#define PROGVERSION "0.3.6"
 #define DBVERSION "3.0"
 #define PROGNAME "mv2mariadb"
 #define DEFAULTXZ "mv-movielist.xz"
@@ -46,10 +46,12 @@
 #include "filehelpers.h"
 #include "lzma_dec.h"
 #include "curl.h"
+#include "serverlist.h"
 
 #define DB_1 "-1.json"
 #define DB_2 "-2.json"
 
+CMV2Mysql*		g_mainInstance;
 GSettings		g_settings;
 bool			g_debugPrint;
 const char*		g_progName;
@@ -82,6 +84,7 @@ void CMV2Mysql::Init()
 	g_debugPrint		= false;
 	multiQuery		= true;
 	downloadOnly		= false;
+	loadServerlist		= false;
 	g_mvDate		= time(0);
 	csql			= NULL;
 	convertData		= true;
@@ -92,12 +95,15 @@ void CMV2Mysql::Init()
 	string agentTmp1	= "MediathekView data to sql - ";
 	string agentTmp2a	= "versionscheck ";
 	string agentTmp2b	= "downloader ";
+	string agentTmp2c	= "listcheck ";
 	string agentTmp3	= "(" + (string)g_progName + "/" + (string)PROGVERSION + ", curl/" + (string)LIBCURL_VERSION + ")";
 	userAgentCheck		= agentTmp1 + agentTmp2a + agentTmp3;
 	userAgentDownload	= agentTmp1 + agentTmp2b + agentTmp3;
+	userAgentListCheck	= agentTmp1 + agentTmp2c + agentTmp3;
 #else
 	userAgentCheck		= "";
 	userAgentDownload	= "";
+	userAgentListCheck	= "";
 #endif
 }
 
@@ -122,7 +128,6 @@ void CMV2Mysql::printCopyright()
 
 int CMV2Mysql::loadSetup(string fname)
 {
-	char cfg_key[128];
 	int erg = 0;
 	if (!configFile.loadConfig(fname.c_str()))
 		/* file not exist */
@@ -146,20 +151,15 @@ int CMV2Mysql::loadSetup(string fname)
 	}
 
 	/* download server */
-	int count			= configFile.getInt32("downloadServerCount", 1);
-	g_settings.downloadServerCount	= max(count, 1);
-	g_settings.downloadServerCount	= min(count, MAX_DL_SERVER_COUNT);
-	count				= configFile.getInt32("lastDownloadServer", 1);
-	g_settings.lastDownloadServer	= max(count, 1);
-	g_settings.lastDownloadServer	= min(count, g_settings.downloadServerCount);
-	g_settings.lastDownloadTime	= (time_t)configFile.getInt64("lastDownloadTime", 0);
-	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
-		sprintf(cfg_key, "downloadServer_%02d", i);
-		g_settings.downloadServer[i] = configFile.getString(cfg_key, "-");
-	}
+	loadDownloadServerSetup();
 
 	/* password file */
-	g_settings.passwordFile	= configFile.getString("passwordFile",   "pw_mariadb");
+	g_settings.passwordFile		= configFile.getString("passwordFile",         "pw_mariadb");
+
+	/* server list */
+	g_settings.serverListUrl	 = configFile.getString("serverListUrl",               "http://zdfmediathk.sourceforge.net/akt.xml");
+	g_settings.serverListLastRefresh = (time_t)configFile.getInt64("serverListLastRefresh", 0);
+	g_settings.serverListRefreshDays = configFile.getInt32("serverListRefreshDays",         7);
 
 	if (erg)
 		configFile.setModifiedFlag(true);
@@ -168,8 +168,6 @@ int CMV2Mysql::loadSetup(string fname)
 
 void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 {
-	char cfg_key[128];
-
 	/* test mode */
 	configFile.setString("testLabel",            g_settings.testLabel);
 	configFile.setBool  ("testMode",             g_settings.testMode);
@@ -184,44 +182,81 @@ void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 	configFile.setString("videoDb_TableVersion", g_settings.videoDb_TableVersion);
 
 	/* download server */
-	configFile.setInt32 ("downloadServerCount",  g_settings.downloadServerCount);
-	configFile.setInt32 ("lastDownloadServer",   g_settings.lastDownloadServer);
-	configFile.setInt64 ("lastDownloadTime",     (int64_t)(g_settings.lastDownloadTime));
-	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
-		memset(cfg_key, 0, sizeof(cfg_key));
-		sprintf(cfg_key, "downloadServer_%02d", i);
-		configFile.setString(cfg_key, g_settings.downloadServer[i]);
-	}
+	saveDownloadServerSetup();
 
 	/* password file */
 	configFile.setString("passwordFile",         g_settings.passwordFile);
 
+	/* server list */
+	configFile.setString("serverListUrl",         g_settings.serverListUrl);
+	configFile.setInt64 ("serverListLastRefresh", (int64_t)(g_settings.serverListLastRefresh));
+	configFile.setInt32 ("serverListRefreshDays", g_settings.serverListRefreshDays);
+
 	if (configFile.getModifiedFlag())
 		configFile.saveConfig(fname.c_str(), '=', quiet);
+}
+
+void CMV2Mysql::loadDownloadServerSetup()
+{
+	char cfg_key[256];
+	int count					= configFile.getInt32("downloadServerCount", 1);
+	g_settings.downloadServerCount			= max(count, 1);
+	g_settings.downloadServerCount			= min(count, MAX_DL_SERVER_COUNT);
+	count						= configFile.getInt32("lastDownloadServer", 1);
+	g_settings.lastDownloadServer			= max(count, 1);
+	g_settings.lastDownloadServer			= min(count, g_settings.downloadServerCount);
+	g_settings.lastDownloadTime			= (time_t)configFile.getInt64("lastDownloadTime", 0);
+	g_settings.downloadServerConnectFailsMax	= configFile.getInt32("downloadServerConnectFailsMax", 3);
+	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
+		memset(cfg_key, 0, sizeof(cfg_key));
+		snprintf(cfg_key, sizeof(cfg_key), "downloadServer_%02d", i);
+		g_settings.downloadServer[i] = configFile.getString(cfg_key, "-");
+		memset(cfg_key, 0, sizeof(cfg_key));
+		snprintf(cfg_key, sizeof(cfg_key), "downloadServerConnectFail_%02d", i);
+		g_settings.downloadServerConnectFail[i] = configFile.getInt32(cfg_key, 0);
+	}
+}
+
+void CMV2Mysql::saveDownloadServerSetup()
+{
+	char cfg_key[256];
+	configFile.setInt32 ("downloadServerCount",           g_settings.downloadServerCount);
+	configFile.setInt32 ("lastDownloadServer",            g_settings.lastDownloadServer);
+	configFile.setInt64 ("lastDownloadTime",              (int64_t)(g_settings.lastDownloadTime));
+	configFile.setInt32 ("downloadServerConnectFailsMax", g_settings.downloadServerConnectFailsMax);
+	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
+		memset(cfg_key, 0, sizeof(cfg_key));
+		snprintf(cfg_key, sizeof(cfg_key), "downloadServer_%02d", i);
+		configFile.setString(cfg_key, g_settings.downloadServer[i]);
+		memset(cfg_key, 0, sizeof(cfg_key));
+		snprintf(cfg_key, sizeof(cfg_key), "downloadServerConnectFail_%02d", i);
+		configFile.setInt32(cfg_key, g_settings.downloadServerConnectFail[i]);
+	}
 }
 
 void CMV2Mysql::printHelp()
 {
 	printHeader();
 	printCopyright();
-	printf("  -e | --epoch		=> Use not older entrys than 'epoch' days\n");
-	printf("			   (default all data)\n");
-	printf("  -f | --force-convert	=> Data also convert, when\n");
-	printf("			   movie list is up-to-date.\n");
-	printf("  -c | --cron-mode	=> Time in minutes. Specifies the period during\n");
-	printf("			   which no new version check is performed\n");
-	printf("			   after the last download.\n");
-	printf("  -C | --cron-mode-echo	=> Output message during --cron-mode to the log\n");
-	printf("			   (Default: no output)\n");
-	printf("       --update		=> Create new config file and\n");
-	printf("			   new template database, then exit.\n");
-	printf("       --download-only	=> Download only (Don't convert\n");
-	printf("			   to sql database).\n");
+	printf("  -e | --epoch xxx	 => Use not older entrys than 'xxx' days\n");
+	printf("			    (default all data)\n");
+	printf("  -f | --force-convert	 => Data also convert, when\n");
+	printf("			    movie list is up-to-date.\n");
+	printf("  -c | --cron-mode xxx	 => 'xxx' = time in minutes. Specifies the period during\n");
+	printf("			    which no new version check is performed\n");
+	printf("			    after the last download.\n");
+	printf("  -C | --cron-mode-echo	 => Output message during --cron-mode to the log\n");
+	printf("			    (Default: no output)\n");
+	printf("       --update		 => Create new config file and\n");
+	printf("			    new template database, then exit.\n");
+	printf("       --download-only	 => Download only (Don't convert\n");
+	printf("			    to sql database).\n");
+	printf("       --load-serverlist => Load new serverlist and exit.\n");
 
 	printf("\n");
-	printf("  -d | --debug-print	=> Print debug info\n");
-	printf("  -v | --version	=> Display versions info and exit\n");
-	printf("  -h | --help		=> Display this help screen and exit\n");
+	printf("  -d | --debug-print	 => Print debug info\n");
+	printf("  -v | --version	 => Display versions info and exit\n");
+	printf("  -h | --help		 => Display this help screen and exit\n");
 }
 
 int CMV2Mysql::run(int argc, char *argv[])
@@ -268,13 +303,14 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"cron-mode-echo",	noParam,       NULL, 'C'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
+		{"load-serverlist",	noParam,       NULL, '3'},
 		{"debug-print",		noParam,       NULL, 'd'},
 		{"version",		noParam,       NULL, 'v'},
 		{"help",		noParam,       NULL, 'h'},
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "e:fc:C12dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "e:fc:C123dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'e':
 				/* >=0 and <=24800 */
@@ -299,6 +335,9 @@ int CMV2Mysql::run(int argc, char *argv[])
 				return 0;
 			case '2':
 				downloadOnly = true;
+				break;
+			case '3':
+				loadServerlist = true;
 				break;
 			case 'd':
 				g_debugPrint = true;
@@ -337,6 +376,25 @@ int CMV2Mysql::run(int argc, char *argv[])
 			/* The last download is recent enough, exit. */
 			return 0;
 		}
+	}
+
+	if (loadServerlist || ((g_settings.serverListLastRefresh + g_settings.serverListRefreshDays*24*3600) < time(0))) {
+		CServerlist* csl = new CServerlist(userAgentListCheck);
+		csl->getServerList();
+		delete csl;
+		printf("[%s] update download server list...\n", g_progName);
+		if (g_debugPrint) {
+			if (g_settings.downloadServerCount > 0) {
+				for (int i = 1; i <= g_settings.downloadServerCount; i++) {
+					printf("[%s] download server found: %s\n", g_progName, (g_settings.downloadServer[i]).c_str());
+				}
+			}
+		}
+		if (g_settings.downloadServerCount < 1) {
+			printf("[%s] no download server found ;-(\n", g_progName);
+			return 1;
+		}
+		g_settings.serverListLastRefresh = time(0);
 	}
 
 	if (!getDownloadUrlList())
@@ -424,14 +482,18 @@ bool CMV2Mysql::getDownloadUrlList()
 	}
 
 	for (uint32_t i = 0; i < numberList.size(); i++) {
+		if (g_settings.downloadServerConnectFail[numberList[i]] >= g_settings.downloadServerConnectFailsMax)
+			continue;
 		string dlServer = g_settings.downloadServer[numberList[i]];
 		if (g_debugPrint)
 			printf("[%s-debug] check %s", g_progName, dlServer.c_str());
 		if (downloadDB(dlServer)) {
+			g_settings.downloadServerConnectFail[numberList[i]] = 0;
 			g_settings.lastDownloadServer = numberList[i];
 			return true;
 		}
 		else {
+			g_settings.downloadServerConnectFail[numberList[i]] += 1;
 			if (g_debugPrint)
 				printf(" ERROR\n");
 		}
@@ -890,6 +952,7 @@ void myExit(int val)
 
 int main(int argc, char *argv[])
 {
+	g_mainInstance = NULL;
 	/* Create semaphore to correctly identify
 	 * the program to prevent multiple instances. */
 	mySemHandle = sem_open(mySEMID, O_CREAT|O_EXCL);
@@ -902,9 +965,9 @@ int main(int argc, char *argv[])
 	}
 
 	/* main prog */
-	CMV2Mysql* mainInstance = new CMV2Mysql();
-	int ret = mainInstance->run(argc, argv);
-	delete mainInstance;
+	g_mainInstance = new CMV2Mysql();
+	int ret = g_mainInstance->run(argc, argv);
+	delete g_mainInstance;
 
 	/* Remove semaphore */
 	if (mySemHandle != NULL)

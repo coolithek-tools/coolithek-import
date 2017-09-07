@@ -16,6 +16,7 @@ Required:
   - liblzma
   - libcurl
   - libpthread
+  - libexpat
 
 
 

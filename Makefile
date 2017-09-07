@@ -21,7 +21,7 @@ endif
 CFLAGS   += -fmax-errors=10
 CFLAGS   += $(EXTRA_CFLAGS)
 
-LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma -lcurl -lpthread
+LIBS     = -lstdc++ -ljsoncpp -lmariadb -llzma -lcurl -lpthread -lexpat
 LDFLAGS  = $(LIBS)
 
 ifeq ($(DEBUG), 1)
@@ -37,7 +37,8 @@ PROG_SOURCES = \
 	src/filehelpers.cpp \
 	src/configfile.cpp \
 	src/lzma_dec.cpp \
-	src/curl.cpp
+	src/curl.cpp \
+	src/serverlist.cpp
 
 mv2mariadb: $(PROG_SOURCES)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(PROG_SOURCES) -o mv2mariadb

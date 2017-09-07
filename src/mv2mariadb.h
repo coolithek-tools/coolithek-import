@@ -85,12 +85,19 @@ struct GSettings
 
 	/* download server */
 	string downloadServer[MAX_DL_SERVER_COUNT];
+	int    downloadServerConnectFail[MAX_DL_SERVER_COUNT];
 	int    downloadServerCount;
 	int    lastDownloadServer;
 	time_t lastDownloadTime;
+	int    downloadServerConnectFailsMax;
 
 	/* password file */
 	string passwordFile;
+
+	/* server list */
+	string serverListUrl;
+	time_t serverListLastRefresh;
+	int    serverListRefreshDays;
 };
 
 class CSql;
@@ -110,6 +117,7 @@ class CMV2Mysql
 		string configFileName;
 		CConfigFile configFile;
 		bool downloadOnly;
+		bool loadServerlist;
 		string defaultXZ;
 		bool convertData;
 		bool forceConvertData;
@@ -122,6 +130,7 @@ class CMV2Mysql
 		string VIDEO_DB_TMP_1;
 		string userAgentCheck;
 		string userAgentDownload;
+		string userAgentListCheck;
 
 		void Init();
 		void printHeader();
@@ -145,6 +154,11 @@ class CMV2Mysql
 		CMV2Mysql();
 		~CMV2Mysql();
 		int run(int argc, char *argv[]);
+
+		void loadDownloadServerSetup();
+		void saveDownloadServerSetup();
+		CConfigFile* getConfig() { return &configFile; };
+
 };
 
 
