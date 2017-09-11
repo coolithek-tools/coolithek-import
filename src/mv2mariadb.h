@@ -114,6 +114,7 @@ class CMV2Mysql
 		int epoch;
 		int cronMode;
 		bool cronModeEcho;
+		bool createIndexes;
 		string configFileName;
 		CConfigFile configFile;
 		bool downloadOnly;

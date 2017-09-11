@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.6"
+#define PROGVERSION "0.3.7"
 #define DBVERSION "3.0"
 #define PROGNAME "mv2mariadb"
 #define DEFAULTXZ "mv-movielist.xz"
@@ -84,6 +84,7 @@ void CMV2Mysql::Init()
 	g_debugPrint		= false;
 	multiQuery		= true;
 	downloadOnly		= false;
+	createIndexes		= true;
 	loadServerlist		= false;
 	g_mvDate		= time(0);
 	csql			= NULL;
@@ -247,6 +248,7 @@ void CMV2Mysql::printHelp()
 	printf("			    after the last download.\n");
 	printf("  -C | --cron-mode-echo	 => Output message during --cron-mode to the log\n");
 	printf("			    (Default: no output)\n");
+	printf("  -n | --no-indexes	 => Don't create indexes for database\n");
 	printf("       --update		 => Create new config file and\n");
 	printf("			    new template database, then exit.\n");
 	printf("       --download-only	 => Download only (Don't convert\n");
@@ -301,6 +303,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"force-convert",	noParam,       NULL, 'f'},
 		{"cron-mode",		requiredParam, NULL, 'c'},
 		{"cron-mode-echo",	noParam,       NULL, 'C'},
+		{"no-indexes",		noParam,       NULL, 'n'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
 		{"load-serverlist",	noParam,       NULL, '3'},
@@ -310,7 +313,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "e:fc:C123dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "e:fc:Cn123dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'e':
 				/* >=0 and <=24800 */
@@ -325,6 +328,9 @@ int CMV2Mysql::run(int argc, char *argv[])
 				break;
 			case 'C':
 				cronModeEcho = true;
+				break;
+			case 'n':
+				createIndexes = false;
 				break;
 			case '1':
 				configFile.setModifiedFlag(true);
@@ -899,7 +905,8 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	csql->renameDB();
-	csql->createIndex();
+	if (createIndexes)
+		csql->createIndex();
 
 	if (skipUrl > 0)
 		printf("[%s] skiped entrys (no url) %d\n", g_progName, skipUrl);
