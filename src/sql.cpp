@@ -145,12 +145,12 @@ string CSql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoE
 	}
 	entry += "(";
 	entry += checkInt(count) + ",";
-	entry += checkString(videoEntry->channel, 256) + ",";
-	entry += checkString(videoEntry->theme, 256) + ",";
+	entry += checkString(videoEntry->channel, 128) + ",";
+	entry += checkString(videoEntry->theme, 1024) + ",";
 	entry += checkString(videoEntry->title, 1024) + ",";
 	entry += checkInt(videoEntry->duration) + ",";
 	entry += checkInt(videoEntry->size_mb) + ",";
-	entry += checkString(videoEntry->description, 8192) + ",";
+	entry += checkString(videoEntry->description, 32768) + ",";
 	entry += checkString(videoEntry->url, 1024) + ",";
 	entry += checkString(videoEntry->website, 1024) + ",";
 	entry += checkString(videoEntry->subtitle, 1024) + ",";
@@ -163,7 +163,7 @@ string CSql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoE
 	entry += checkString(videoEntry->url_history, 1024) + ",";
 	entry += checkString(videoEntry->geo, 1024) + ",";
 	entry += checkInt(0) + ",";
-	entry += checkString(videoEntry->new_entry, 1024);
+	entry += checkInt((int)videoEntry->new_entry);
 	entry += ")";
 
 	return entry;
@@ -270,6 +270,39 @@ void CSql::checkTemplateDB(string name)
 
 	if (multiQuery)
 		setServerMultiStatementsOn();
+}
+
+bool CSql::createIndex()
+{
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("[%s] create indexes on database...", g_progName); fflush(stdout);
+
+	string sql = "";
+	sql += "START TRANSACTION;";
+	sql += "SET autocommit = 0;";
+	sql += "USE `" + VIDEO_DB + "`;";
+
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD INDEX `channel` (`channel`);";
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD INDEX `date_unix` (`date_unix`);";
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD INDEX `duration` (`duration`);";
+#if 1
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD INDEX `theme` (`theme`(128));";
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD INDEX `title` (`title`(128));";
+#else
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD FULLTEXT INDEX `title` (`title`);";
+	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD FULLTEXT INDEX `theme` (`theme`);";
+#endif
+	sql += "COMMIT;";
+
+	bool ret = executeMultiQueryString(sql);
+
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
+
+	return ret;
 }
 
 bool CSql::createTemplateDB(string name, bool quiet/* = false*/)

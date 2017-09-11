@@ -27,12 +27,12 @@ CREATE TABLE `@@@tab_version@@@` (
 
 CREATE TABLE `@@@tab_video@@@` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `channel` varchar(256) DEFAULT NULL,
-  `theme` varchar(256) DEFAULT NULL,
+  `channel` varchar(128) DEFAULT NULL,
+  `theme` varchar(1024) DEFAULT NULL,
   `title` varchar(1024) DEFAULT NULL,
   `duration` int(11) DEFAULT NULL,
   `size_mb` int(11) DEFAULT NULL,
-  `description` text DEFAULT NULL,
+  `description` text,
   `url` varchar(1024) DEFAULT NULL,
   `website` varchar(1024) DEFAULT NULL,
   `subtitle` varchar(1024) DEFAULT NULL,
@@ -44,8 +44,9 @@ CREATE TABLE `@@@tab_video@@@` (
   `date_unix` int(11) DEFAULT NULL,
   `url_history` varchar(1024) DEFAULT NULL,
   `geo` varchar(1024) DEFAULT NULL,
-  `parse_m3u8` int(11) NOT NULL DEFAULT 0,
-  `new_entry` varchar(1024) DEFAULT NULL,
+  `parse_m3u8` int(11) NOT NULL DEFAULT '0',
+  `new_entry` tinyint(1) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 COMMIT;

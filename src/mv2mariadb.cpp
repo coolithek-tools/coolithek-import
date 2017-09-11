@@ -839,7 +839,7 @@ bool CMV2Mysql::parseDB(string db)
 
 			videoEntry.url_history		= data[17].asString();
 			videoEntry.geo			= data[18].asString();
-			videoEntry.new_entry		= data[19].asString();
+			videoEntry.new_entry		= ((data[19].asString() == "true") || (data[19].asString() == "TRUE")) ? true : false;
 
 			videoEntry.channel		= cName;
 			cCount++;
@@ -899,6 +899,7 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	csql->renameDB();
+	csql->createIndex();
 
 	if (skipUrl > 0)
 		printf("[%s] skiped entrys (no url) %d\n", g_progName, skipUrl);

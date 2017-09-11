@@ -55,7 +55,7 @@ typedef struct VideoEntry
 	int    date_unix;
 	string url_history;
 	string geo;
-	string new_entry;
+	bool   new_entry;
 } TVideoEntry;
 
 typedef struct VideoInfoEntry
