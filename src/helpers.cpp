@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <iostream>
 #include <sstream>
 
 #include "helpers.h"
@@ -111,6 +110,18 @@ string& str_replace(const string &search, const string &replace, string &text)
 		text.replace(pos, searchLen, replace);
 	}
 	return text;
+}
+
+string str_tolower(string s)
+{
+	::transform(s.begin(), s.end(), s.begin(), static_cast<int(*)(int)>(::tolower));
+	return s;
+}
+
+string str_toupper(string s)
+{
+	::transform(s.begin(), s.end(), s.begin(), static_cast<int(*)(int)>(::toupper));
+	return s;
 }
 
 string _getPathName(string &path, string sep)

@@ -10,6 +10,10 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
+#include <cctype>
+#include <clocale>
+#include <algorithm>
 
 using namespace std;
 
@@ -28,6 +32,9 @@ string to_string(long long);
 string to_string(unsigned long long);
 
 string& str_replace(const string &search, const string &replace, string &text);
+
+string str_tolower(string s);
+string str_toupper(string s);
 
 string getPathName(string &path);
 string getBaseName(string &path);
