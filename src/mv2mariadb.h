@@ -142,9 +142,8 @@ class CMV2Mysql
 		bool getDownloadUrlList();
 		long getVersionFromXZ(string xz_, string json_);
 		bool downloadDB(string url);
-		void convertDB(string db);
-		bool openDB(string db);
-		bool parseDB(string db);
+		bool repairJsonData(string db, string& data);
+		bool parseDB();
 		string convertUrl(string url1, string url2);
 
 		int loadSetup(string fname);

@@ -20,7 +20,7 @@
 	Boston, MA  02110-1301, USA.
 */
 
-#define PROGVERSION "0.3.7"
+#define PROGVERSION "0.3.8"
 #define DBVERSION "3.0"
 #define PROGNAME "mv2mariadb"
 #define DEFAULTXZ "mv-movielist.xz"
@@ -413,12 +413,10 @@ int CMV2Mysql::run(int argc, char *argv[])
 		printf("[%s] %s, don't convert to sql database\n", g_progName, msg); fflush(stdout);
 		return 0;
 	}
-	if (!openDB(jsonDbName))
-		return 1;
 
 	csql->connectMysql();
 	csql->checkTemplateDB(templateDBFile);
-	parseDB(jsonDbName);
+	parseDB();
 
 	return 0;
 }
@@ -611,142 +609,87 @@ bool CMV2Mysql::downloadDB(string url)
 	return true;
 }
 
-void CMV2Mysql::convertDB(string db)
+bool CMV2Mysql::repairJsonData(string db, string& data)
 {
-	FILE* f1 = fopen(db.c_str(), "r");
-	if (f1 == NULL) {
-		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
-		return;
-	}
-	FILE* f2 = fopen((db + DB_1).c_str(), "w+");
+	printf("[%s] repair json data...", g_progName); fflush(stdout);
 
-	printf("[%s] convert json db...", g_progName); fflush(stdout);
-
-	char buf[8192];
-	string line;
-	string listSearch = "\"Filmliste\":";
-	string xSearch    = "\"X\":";
-
-	int c = 32;
-	while (c != EOF) {
-		int count = 0;
-		memset(buf, 0, sizeof(buf));
-		c = 32;
-		while ((c != ',') && (c != EOF)) {
-			c = fgetc(f1);
-			if (c != EOF)
-				buf[count] = c;
-			count++;
-		}
-
-		string tmpLine;
-		line = buf;
-		size_t pos = line.find(listSearch);
-		if (pos != string::npos) {
-			tmpLine = "\n\"Filmliste\":";
-			line.replace(pos, listSearch.length(), tmpLine);
-		}
-		pos = line.find(xSearch);
-		if (pos != string::npos) {
-			tmpLine = "\n\"X\":";
-			line.replace(pos, xSearch.length(), tmpLine);
-		}
-
-		fputs(line.c_str(), f2);
-	}
-
-	fclose(f1);
-	fputs("\n", f2);
-	fclose(f2);
-
-	printf("done.\n"); fflush(stdout);
-}
-
-bool CMV2Mysql::openDB(string db)
-{
-	CLZMAdec* xzDec = new CLZMAdec();
-	xzDec->decodeXZ(xzName, jsonDbName);
-	delete xzDec;
-
-	convertDB(db);
-
-	FILE* f = fopen((db + DB_1).c_str(), "r");
-	if (f == NULL) {
-		printf("#### [%s:%d] error opening db file: %s\n", __func__, __LINE__, db.c_str());
+	ifstream jsonData(db.c_str(), ifstream::binary);
+	if (!jsonData.is_open()) {
+		printf("\n[%s %s:%d] Failed to open json db %s\n", g_progName, __func__, __LINE__, db.c_str());
 		return false;
 	}
 
-	printf("[%s] read json db...", g_progName); fflush(stdout);
-	fseek(f, 0, SEEK_END);
-	size_t fsize = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	jsonBuf = "";
-	char buf[0xFFFF];
-	string line;
-	string listSearch = "\"Filmliste\"";
-	string xSearch    = "\"X\"";
-	int count = 1;
-	while(fgets(buf, sizeof(buf), f) != NULL) {
-		string tmpLine;
-		line = buf;
-		line = trim(line);
-		if (line.find(listSearch) == 0) {
-			tmpLine = "{\"Filmliste\"";
-			line.replace(0, listSearch.length(), tmpLine);
-			size_t pos = line.find_last_of("]");
-			line.replace(pos, 1, "]}");
-			count++;
-		}
-		else if (line.find(xSearch) == 0) {
-			tmpLine = "{\"X\"";
-			line.replace(0, xSearch.length(), tmpLine);
-			size_t pos = line.find_last_of("]");
-			line.replace(pos, 1, "]}");
-			count++;
-		}
-		jsonBuf += line + "\n";
-	}	
-	size_t lPos = jsonBuf.find_first_of("{");
-	jsonBuf.replace(lPos, 1, "[");
-	lPos = jsonBuf.find_last_of("}");
-	jsonBuf.replace(lPos, 1, "\n]");
+	jsonData.seekg(0, jsonData.end);
+	int length    = jsonData.tellg();
+	int lengthNew = length+3;
+	jsonData.seekg(0, jsonData.beg);
+	char* buffer = new char[lengthNew];
+	if (buffer == NULL) {
+		printf("\n[%s %s:%d] memory error\n", g_progName, __func__, __LINE__);
+		jsonData.close();
+		return false;
+	}
 
-	fclose(f);
+	jsonData.read(&(buffer[1]), length);
+	jsonData.close();
+	buffer[0] = '[';
+	buffer[lengthNew-2] = ']';
+	buffer[lengthNew-1] = '\0';
 
-	f = fopen((db + DB_2).c_str(), "w+");
-	fwrite(jsonBuf.c_str(), jsonBuf.length(), 1, f);
-	fclose(f);
-	jsonBuf.clear();
+/*
+],"X" => ]},{"X"
+*/
+	const char* cRet1 = cstr_replace("],\"X\"", "]},{\"X\"", buffer);
+	delete [] buffer;
+	if (cRet1 == NULL) {
+		printf("\n[%s %s:%d] cstr_replace error\n", g_progName, __func__, __LINE__);
+		return false;
+	}
 
-	printf("done (%u Bytes)\n", (uint32_t)fsize); fflush(stdout);
+/*
+],"Filmliste" => ]},{"Filmliste"
+*/
+	const char* cRet2 = cstr_replace("],\"Filmliste\"", "]},{\"Filmliste\"", cRet1);
+	delete [] cRet1;
+	if (cRet2 == NULL) {
+		printf("\n[%s %s:%d] cstr_replace error\n", g_progName, __func__, __LINE__);
+		return false;
+	}
+	data = (string)cRet2;
+	delete [] cRet2;
+
+	/* save repaired data (file is not needed) */
+	ofstream out((db + ".json").c_str(), ofstream::binary);
+	out.write (data.c_str(), data.size());
+	out.close();
+	printf("done.\n"); fflush(stdout);
 
 	return true;
 }
 
-bool CMV2Mysql::parseDB(string db)
+bool CMV2Mysql::parseDB()
 {
+	/* extract movie list */
+	CLZMAdec* xzDec = new CLZMAdec();
+	xzDec->decodeXZ(xzName, jsonDbName);
+	delete xzDec;
+
+	string jData;
+	if (!repairJsonData(jsonDbName, jData))
+		return false;
+
 	printf("[%s] parse json db & write temporary database...", g_progName); fflush(stdout);
 
 	Json::Value root;
 	Json::Reader reader;
 	bool parsedSuccess = false;
-
-	ifstream jsonData((db + DB_2).c_str(), ifstream::binary);
-	if (!jsonData.is_open()) {
-		printf("\n[%s:%d] Failed to open json db %s\n", __func__, __LINE__, (db + DB_2).c_str());
-		return false;
-	}
-
-	parsedSuccess = reader.parse(jsonData, root, false);
-	jsonData.close();
-
+	parsedSuccess = reader.parse(jData, root, false);
+	jData.clear();
 	if(!parsedSuccess) {
 		printf("\nFailed to parse JSON\n");
 		printf("[%s:%d] %s\n", __func__, __LINE__, reader.getFormattedErrorMessages().c_str());
 		return false;
 	}
-
-	Json::Value data;
 
 	string cName = "";
 	string tName = "";
@@ -780,6 +723,7 @@ bool CMV2Mysql::parseDB(string db)
 	}
 
 	for (unsigned int i = 0; i < root.size(); ++i) {
+		Json::Value data;
 		if (i == 0) {		/* head 1 */
 			data = root[i].get("Filmliste", "");
 			string tmp  = data[1].asString();
