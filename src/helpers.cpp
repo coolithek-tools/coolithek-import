@@ -136,14 +136,16 @@ const char *cstr_replace(const char *search, const char *replace, const char *te
 		return NULL; // empty search causes infinite loop during count
 	if (!replace)
 		replace = "";
-	    len_replace = strlen(replace);
+	len_replace = strlen(replace);
 
 	// count the number of replacements needed
 	ins = text;
 	for (count = 0; (tmp = (char*)strstr(ins, search)); ++count)
 		ins = tmp + len_search;
 
-	tmp = new char[strlen(text) + (len_replace - len_search) * count + 1];
+	int len_tmp = strlen(text) + (len_replace - len_search) * count + 1;
+	tmp = new char[len_tmp];
+	memset(tmp, '\0', len_tmp);
 	result = (const char*)tmp;
 
 	if (!result)
@@ -158,10 +160,10 @@ const char *cstr_replace(const char *search, const char *replace, const char *te
 		ins = strstr(text, search);
 		len_front = ins - text;
 		tmp = strncpy(tmp, text, len_front) + len_front;
-		tmp = strcpy(tmp, replace) + len_replace;
+		tmp = strncpy(tmp, replace, len_replace) + len_replace;
 		text += len_front + len_search; // move to next "end of search"
 	}
-	strcpy(tmp, text);
+	strncpy(tmp, text, strlen(text));
 	return result;
 }
 
