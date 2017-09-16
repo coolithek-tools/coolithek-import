@@ -55,6 +55,7 @@ vector<string> split(const string &s, char delim)
 	return vec;
 }
 
+#if __cplusplus < 201103L
 string to_string(int i)
 {
 	stringstream s;
@@ -96,6 +97,7 @@ string to_string(unsigned long long i)
 	s << i;
 	return s.str();
 }
+#endif
 
 string& str_replace(const string &search, const string &replace, string &text)
 {

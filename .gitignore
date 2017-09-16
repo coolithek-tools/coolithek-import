@@ -6,3 +6,5 @@ zz*.sh
 *.diff
 *.patch
 priv-settings.mk
+*.o
+*.d

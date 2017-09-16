@@ -24,12 +24,14 @@ string trim(string &str, const string &trimChars = " \n\r\t");
 
 vector<string> split(const string &s, char delim);
 
+#if __cplusplus < 201103L
 string to_string(int);
 string to_string(unsigned int);
 string to_string(long);
 string to_string(unsigned long);
 string to_string(long long);
 string to_string(unsigned long long);
+#endif
 
 string& str_replace(const string &search, const string &replace, string &text);
 const char *cstr_replace(const char *search, const char *replace, const char *text);

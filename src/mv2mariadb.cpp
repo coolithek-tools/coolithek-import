@@ -74,7 +74,7 @@ void CMV2Mysql::Init()
 {
 	g_progName		= PROGNAME;
 	g_progCopyright		= "Copyright (C) 2015-2017, M. Liebmann 'micha-bbg'";
-	g_progVersion		= "v"PROGVERSION;
+	g_progVersion		= "v" PROGVERSION;
 	g_dbVersion		= DBVERSION;
 	defaultXZ		= (string)DEFAULTXZ;
 
