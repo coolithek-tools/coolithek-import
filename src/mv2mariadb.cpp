@@ -158,7 +158,7 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.passwordFile		= configFile.getString("passwordFile",         "pw_mariadb");
 
 	/* server list */
-	g_settings.serverListUrl	 = configFile.getString("serverListUrl",               "http://zdfmediathk.sourceforge.net/akt.xml");
+	g_settings.serverListUrl	 = configFile.getString("serverListUrl",               "https://res.mediathekview.de/akt.xml");
 	g_settings.serverListLastRefresh = (time_t)configFile.getInt64("serverListLastRefresh", 0);
 	g_settings.serverListRefreshDays = configFile.getInt32("serverListRefreshDays",         7);
 
