@@ -680,21 +680,14 @@ bool CMV2Mysql::parseDB()
 
 	printf("[%s] parse json db & write temporary database...", g_progName); fflush(stdout);
 
-	Json::CharReaderBuilder builder;
-	Json::CharReader* reader(builder.newCharReader());
-	JSONCPP_STRING errs = "";
+	string errMsg = "";
 	Json::Value root;
-	const char* jData_c = jData.c_str();
-
-	bool ok = reader->parse(jData_c, jData_c + strlen(jData_c), &root, &errs);
-	if (!ok || (!errs.empty())) {
+	bool ok = parseJsonFromString(jData, &root, &errMsg);
+	if (!ok) {
 		printf("\nFailed to parse JSON\n");
-		printf("[%s:%d] %s\n", __func__, __LINE__, errs.c_str());
-		delete reader;
+		printf("[%s:%d] %s\n", __func__, __LINE__, errMsg.c_str());
 		return false;
 	}
-	delete reader;
-	jData.clear();
 
 	string cName = "";
 	string tName = "";
