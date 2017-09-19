@@ -667,8 +667,6 @@ bool CMV2Mysql::repairJsonData(string db, string& data)
 	return true;
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 bool CMV2Mysql::parseDB()
 {
 	/* extract movie list */
@@ -682,16 +680,21 @@ bool CMV2Mysql::parseDB()
 
 	printf("[%s] parse json db & write temporary database...", g_progName); fflush(stdout);
 
+	Json::CharReaderBuilder builder;
+	Json::CharReader* reader(builder.newCharReader());
+	JSONCPP_STRING errs = "";
 	Json::Value root;
-	Json::Reader reader;
-	bool parsedSuccess = false;
-	parsedSuccess = reader.parse(jData, root, false);
-	jData.clear();
-	if(!parsedSuccess) {
+	const char* jData_c = jData.c_str();
+
+	bool ok = reader->parse(jData_c, jData_c + strlen(jData_c), &root, &errs);
+	if (!ok || (!errs.empty())) {
 		printf("\nFailed to parse JSON\n");
-		printf("[%s:%d] %s\n", __func__, __LINE__, reader.getFormattedErrorMessages().c_str());
+		printf("[%s:%d] %s\n", __func__, __LINE__, errs.c_str());
+		delete reader;
 		return false;
 	}
+	delete reader;
+	jData.clear();
 
 	string cName = "";
 	string tName = "";
@@ -868,7 +871,6 @@ bool CMV2Mysql::parseDB()
 
 	return true;
 }
-#pragma GCC diagnostic pop
 
 string CMV2Mysql::convertUrl(string url1, string url2)
 {
