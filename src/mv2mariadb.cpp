@@ -667,6 +667,8 @@ bool CMV2Mysql::repairJsonData(string db, string& data)
 	return true;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 bool CMV2Mysql::parseDB()
 {
 	/* extract movie list */
@@ -866,6 +868,7 @@ bool CMV2Mysql::parseDB()
 
 	return true;
 }
+#pragma GCC diagnostic pop
 
 string CMV2Mysql::convertUrl(string url1, string url2)
 {
