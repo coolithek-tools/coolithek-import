@@ -14,6 +14,7 @@
 #include <cctype>
 #include <clocale>
 #include <algorithm>
+#include <json/json.h>
 
 using namespace std;
 
@@ -47,5 +48,9 @@ string getRealPath(string &path);
 
 off_t file_size(const char *filename);
 bool file_exists(const char *filename);
+
+string readFile(string file);
+bool parseJsonFromFile(string& jFile, Json::Value *root, string *errMsg);
+bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg);
 
 #endif // __helpers_h__

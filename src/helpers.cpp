@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <fstream>
 #include <sstream>
 
 #include "helpers.h"
@@ -255,3 +256,50 @@ bool file_exists(const char *filename)
 	}
 }
 
+string readFile(string file)
+{
+	string ret_s;
+	ifstream tmpData(file.c_str(), ifstream::binary);
+	if (tmpData.is_open()) {
+		tmpData.seekg(0, tmpData.end);
+		int length = tmpData.tellg();
+		tmpData.seekg(0, tmpData.beg);
+		char* buffer = new char[length+1];
+		tmpData.read(buffer, length);
+		tmpData.close();
+		buffer[length] = '\0';
+		ret_s = (string)buffer;
+		delete [] buffer;
+	}
+	else {
+		cout << "Error read " << file << endl;
+		return "";
+	}
+
+	return ret_s;
+}
+
+bool parseJsonFromFile(string& jFile, Json::Value *root, string *errMsg)
+{
+	string jData = readFile(jFile);
+	bool ret = parseJsonFromString(jData, root, errMsg);
+	jData.clear();
+	return ret;
+}
+
+bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg)
+{
+	Json::CharReaderBuilder builder;
+	Json::CharReader* reader(builder.newCharReader());
+	JSONCPP_STRING errs = "";
+	const char* jData_c = jData.c_str();
+
+	bool ret = reader->parse(jData_c, jData_c + strlen(jData_c), root, &errs);
+	if (!ret || (!errs.empty())) {
+		ret = false;
+		if (errMsg != NULL)
+			*errMsg = errs;
+	}
+	delete reader;
+	return ret;
+}
