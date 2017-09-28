@@ -12,10 +12,10 @@
 
 #include <fstream>
 #include <sstream>
+#include <iomanip>
+#include <ctime>
 
 #include "helpers.h"
-
-extern void myExit(int val);
 
 time_t duration2time(string t)
 {
@@ -27,6 +27,40 @@ time_t duration2time(string t)
 	return ret;
 }
 
+/* For allowed format strings: see
+ * www.cplusplus.com/reference/iomanip/put_time
+ */
+int duration2sec(string t, string forceFormat)
+{
+	struct tm tm;
+	memset(&tm, '\0', sizeof(struct tm));
+	string t1 = trim(t);
+	string t2 = "1970-01-01 " + t1;
+	istringstream iss(t2);
+	string format = "%Y-%m-%d ";
+	if (forceFormat.empty()) {
+		size_t len = t1.length();
+		if (len == 8)
+			format += "%H:%M:%S";
+		else if (len == 5)
+			format += "%M:%S";
+		else if (len == 2)
+			format += "%S";
+		else {
+			cout << "[" << __func__ << ":" << __LINE__ << "] " << "Error parse time string \""<< t1 << "\"\n" << endl;
+			return 0;
+		}
+	}
+	else
+		format += forceFormat;
+	iss >> get_time(&tm, format.c_str());
+	if (iss.fail()) {
+		cout << "[" << __func__ << ":" << __LINE__ << "] " << "Error parse time string \""<< t2 << "\", format: \""<< format <<"\"\n" << endl;
+		return 0;
+	}
+	return static_cast<int>(mktime(&tm)) + 3600;
+}
+
 time_t str2time(string format, string t)
 {
 	struct tm tm;
@@ -34,10 +68,26 @@ time_t str2time(string format, string t)
 	strptime(t.c_str(), format.c_str(), &tm);
 	time_t ret = mktime(&tm) + 3600;
 
-//printf("\n>>> sec: %d, min: %d, hour: %d, mday: %d, mon: %d, year: %d, wday: %d, yday: %d, isdst: %d\n", tm.tm_sec, tm.tm_min, tm.tm_hour, tm.tm_mday, tm.tm_mon, tm.tm_year, tm.tm_wday, tm.tm_yday, tm.tm_isdst);
-//printf(">>> %ld\n", ret);
-
 	return ret;
+}
+
+/* For allowed format strings: see
+ * www.cplusplus.com/reference/iomanip/put_time
+ */
+time_t str2time2(string format, string t)
+{
+	struct tm tm;
+	memset(&tm, '\0', sizeof(struct tm));
+	time_t tt = 0;
+	istringstream iss(t);
+	iss >> get_time(&tm, format.c_str());
+	if (iss.fail()) {
+		cout << "[" << __func__ << ":" << __LINE__ << "] " << "Error parse time string \""<< t << "\", format: \""<< format <<"\"\n" << endl;
+		return 0;
+	}
+	tt = mktime(&tm);
+	struct tm * ptm = gmtime(&tt);
+	return mktime(ptm);
 }
 
 string trim(string &str, const string &trimChars /*= " \n\r\t"*/)
@@ -224,10 +274,9 @@ string getRealPath(string &path)
 {
 	char buf[PATH_MAX];
 	const char* ret = realpath(path.c_str(), buf);
-	if (ret == NULL) {
-		printf("[%s] Error: path %s not exists.\n", __func__, path.c_str());
-		myExit(1);
-	}
+	if (ret == NULL)
+		return path;
+
 	return (string)ret;
 }
 
@@ -254,6 +303,13 @@ bool file_exists(const char *filename)
 	{
 		return false;
 	}
+}
+
+string endlbr()
+{
+	stringstream ret;
+	ret << (string)"<br />" << endl;
+	return ret.str();
 }
 
 string readFile(string file)
@@ -302,4 +358,19 @@ bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg)
 	}
 	delete reader;
 	return ret;
+}
+
+int safeStrToInt(string val)
+{
+	if (val.empty())
+		return 0;
+
+	string tmp_s = trim(val);
+	int maxLen = (tmp_s.find("-") == 0) ? 11 : 10;
+	tmp_s = tmp_s.substr(0, maxLen);
+	long tmp_l = stol(tmp_s);
+
+	tmp_l = min(tmp_l, static_cast<long>(numeric_limits<int>::max()));
+	tmp_l = max(tmp_l, static_cast<long>(numeric_limits<int>::min()));
+	return static_cast<int>(tmp_l);
 }

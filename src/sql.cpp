@@ -34,8 +34,8 @@
 #include <climits>
 
 #include "sql.h"
-#include "helpers.h"
-#include "filehelpers.h"
+#include "common/helpers.h"
+#include "common/filehelpers.h"
 
 extern GSettings		g_settings;
 extern const char*		g_progName;

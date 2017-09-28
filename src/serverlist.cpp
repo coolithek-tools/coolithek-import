@@ -6,7 +6,7 @@
 
 #include "mv2mariadb.h"
 #include "configfile.h"
-#include "helpers.h"
+#include "common/helpers.h"
 #include "curl.h"
 #include "serverlist.h"
 

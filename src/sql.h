@@ -33,7 +33,7 @@
 
 #include <mysql.h>
 
-#include "helpers.h"
+#include "common/helpers.h"
 #include "mv2mariadb.h"
 
 using namespace std;

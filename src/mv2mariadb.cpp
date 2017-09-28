@@ -42,8 +42,8 @@
 
 #include "sql.h"
 #include "mv2mariadb.h"
-#include "helpers.h"
-#include "filehelpers.h"
+#include "common/helpers.h"
+#include "common/filehelpers.h"
 #include "lzma_dec.h"
 #include "curl.h"
 #include "serverlist.h"
