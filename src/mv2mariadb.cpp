@@ -508,13 +508,14 @@ bool CMV2Mysql::getDownloadUrlList()
 
 long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
 {
-	char buf[dlSegmentSize];
+	char* buf = new char[dlSegmentSize];
 	FILE* f = fopen(xzName.c_str(), "r");
 	fread(buf, sizeof(buf), 1, f);
 	fclose(f);
 	f = fopen(xz_.c_str(), "w+");
 	fwrite(buf, sizeof(buf), 1, f);
 	fclose(f);
+	delete [] buf;
 
 	CLZMAdec* xzDec = new CLZMAdec();
 	xzDec->decodeXZ(xz_, json_, false);
@@ -716,7 +717,7 @@ bool CMV2Mysql::parseDB()
 	gettimeofday(&t1, NULL);
 	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	if (g_debugPrint) {
-		printf("\e[?25l"); /* cursor off */
+		printCursorOff();
 		printf("\n");
 	}
 
@@ -819,8 +820,9 @@ bool CMV2Mysql::parseDB()
 		}
 	}
 
-	if (g_debugPrint)
+	if (g_debugPrint) {
 		printf("[%s-debug] Processed entries: %6d, skip (no url) %d\r", g_progName, entrys, skipUrl); fflush(stdout);
+	}
 
 	if (!sqlBuff.empty()) {
 		csql->executeSingleQueryString(sqlBuff);
@@ -830,7 +832,7 @@ bool CMV2Mysql::parseDB()
 		csql->setServerMultiStatementsOn();
 
 	if (g_debugPrint) {
-		printf("\e[?25h"); /* cursor on */
+		printCursorOn();
 		printf("\n");
 	}
 

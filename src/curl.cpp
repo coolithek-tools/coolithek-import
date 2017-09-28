@@ -254,12 +254,12 @@ int CCurl::CurlDownload(string url,
 	if (!silent)
 		printf("\n[curl:download] download %s => %s\n", url.c_str(), (outputToFile)?output.c_str():"return string");
 	if (!silent) {
-		printf("\e[?25l"); /* cursor off */
+		printCursorOff();
 		printf("\n");
 	}
 	CURLcode ret = curl_easy_perform(curl_handle);
 	if (!silent) {
-		printf("\e[?25h"); /* cursor on */
+		printCursorOn();
 		printf("\n");
 	}
 
