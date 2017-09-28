@@ -147,11 +147,9 @@ install: all
 	@if test "$(quiet)" = "@"; then echo -e "\nINSTALL $(PROGNAME) => $(DESTDIR)\n"; fi;
 	$(quiet)rm -fr $(DESTDIR)/dl
 	$(quiet)rm -fr $(DESTDIR)/sql
-	$(quiet)rm -f $(DESTDIR)/*
+	$(quiet)rm -f $(DESTDIR)/$(PROGNAME)
 	$(quiet)install -m 755 -d $(DESTDIR)/dl
 	$(quiet)install -m 755 -d $(DESTDIR)/sql
-	$(quiet)cp -f pw_mariadb  $(DESTDIR)/pw_mariadb
-	$(quiet)cp -f $(PROGNAME).conf  $(DESTDIR)/$(PROGNAME).conf
 	$(quiet)cp -f src/sql/*  $(DESTDIR)/sql
 	$(quiet)install -m 755 -D $(BUILD_DIR)/$(PROGNAME) $(DESTDIR)/$(PROGNAME)
 
