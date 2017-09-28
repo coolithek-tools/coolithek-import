@@ -55,5 +55,7 @@ string readFile(string file);
 bool parseJsonFromFile(string& jFile, Json::Value *root, string *errMsg);
 bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg);
 int safeStrToInt(string val);
+void printCursorOff();
+void printCursorOn();
 
 #endif // __helpers_h__

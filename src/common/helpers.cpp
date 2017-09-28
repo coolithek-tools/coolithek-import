@@ -374,3 +374,13 @@ int safeStrToInt(string val)
 	tmp_l = max(tmp_l, static_cast<long>(numeric_limits<int>::min()));
 	return static_cast<int>(tmp_l);
 }
+
+void printCursorOff()
+{
+	printf("\033[?25l");
+}
+
+void printCursorOn()
+{
+	printf("\033[?25h");
+}
