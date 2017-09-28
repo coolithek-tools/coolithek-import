@@ -4,76 +4,161 @@
 
 PROG_SOURCES = \
 	src/$(PROGNAME).cpp \
-	src/sql.cpp \
-	src/helpers.cpp \
-	src/filehelpers.cpp \
+	src/common/filehelpers.cpp \
+	src/common/helpers.cpp \
 	src/configfile.cpp \
-	src/lzma_dec.cpp \
 	src/curl.cpp \
-	src/serverlist.cpp
+	src/lzma_dec.cpp \
+	src/serverlist.cpp \
+	src/sql.cpp
 
-PROG_OBJS = ${PROG_SOURCES:.cpp=.o}
-PROG_DEPS = ${PROG_SOURCES:.cpp=.d}
+PROGNAME	 = mv2mariadb
+BUILD_DIR	 = build
+TMP_OBJS	 = ${PROG_SOURCES:.cpp=.o}
+TMP_DEPS	 = ${PROG_SOURCES:.cpp=.d}
+PROG_OBJS	 = $(addprefix $(BUILD_DIR)/,$(TMP_OBJS))
+PROG_DEPS	 = $(addprefix $(BUILD_DIR)/,$(TMP_DEPS))
 
-## (optional) private definitions for DEBUG, EXTRA_CFLAGS etc.
+## (optional) private definitions for DEBUG, EXTRA_CXXFLAGS etc.
+## --------------------------------
+
 -include priv-settings.mk
 
-DEBUG		?= 0
-DESTDIR		?= /usr/local
-EXTRA_CFLAGS	?= 
-EXTRA_LDFLAGS	?= 
-EXTRA_INCLUDES	?= 
-EXTRA_LIBS	?= 
+DEBUG			?= 0
+ENABLE_SANITIZER	?= 0
+QUIET			?= 1
+DESTDIR			?= ./INSTALL
+EXTRA_CXXFLAGS		?= 
+EXTRA_LDFLAGS		?= 
+EXTRA_INCLUDES		?= 
+EXTRA_LIBS		?= 
 
-PROGNAME = mv2mariadb
+CXX			?= g++
+LD			?= g++
+STRIP			?= strip
+STDC++			?= -std=c++11
 
-C++	 = g++-5
-STRIP	 = strip
+## --------------------------------
 
-INCLUDES  = -I/usr/include/mariadb
-INCLUDES += $(EXTRA_INCLUDES)
-
-CFLAGS   = $(INCLUDES) -Wall -W -Wshadow -Werror -pipe -fno-strict-aliasing
-ifeq ($(DEBUG), 1)
-CFLAGS   += -O0 -g -ggdb3
-else
-CFLAGS   += -O3
-endif
-CFLAGS   += -std=c++11
-CFLAGS   += -fmax-errors=10
-CFLAGS   += $(EXTRA_CFLAGS)
-
-LIBS      =
-LIBS     += -ljsoncpp
-LIBS     += -lmariadb
-LIBS     += -llzma
-LIBS     += -lcurl
-LIBS     += -lpthread
-LIBS     += -lexpat
-LIBS     += $(EXTRA_LIBS)
-
-LDFLAGS  = $(LIBS)
-LDFLAGS  += $(EXTRA_LDFLAGS)
-
-ifeq ($(DEBUG), 1)
-all: $(PROGNAME)
-else
-all: $(PROGNAME) strip
+ifneq ($(DEBUG), 1)
+ENABLE_SANITIZER	 = 0
 endif
 
-.cpp.o:
-	$(C++) $(CFLAGS) -MT $@ -MD -MP -c -o $@ $<
+INCLUDES	 =
+INCLUDES	+= -I/usr/include/mariadb
+INCLUDES	+= $(EXTRA_INCLUDES)
 
-$(PROGNAME): $(PROG_OBJS)
-	$(C++) $(LDFLAGS) $(PROG_OBJS) -o $(PROGNAME)
+CXXFLAGS	 = $(INCLUDES) -pipe -fno-strict-aliasing
+ifeq ($(DEBUG), 1)
+CXXFLAGS	+= -O0 -g -ggdb3
+else
+CXXFLAGS	+= -O3
+endif
+CXXFLAGS	+= $(STDC++)
+CXXFLAGS	+= -fmax-errors=10
+CXXFLAGS	+= -Wall
+CXXFLAGS	+= -Wextra
+CXXFLAGS	+= -Wshadow
+CXXFLAGS	+= -Warray-bounds
+CXXFLAGS	+= -Werror
+CXXFLAGS	+= -Werror=format-security
+CXXFLAGS	+= -Werror=array-bounds
+CXXFLAGS	+= -fexceptions
+CXXFLAGS	+= -Wformat
+CXXFLAGS	+= -Wformat-security
+CXXFLAGS	+= -Wuninitialized
+CXXFLAGS	+= -funsigned-char
+CXXFLAGS	+= -Wstrict-overflow
+CXXFLAGS	+= -Woverloaded-virtual
+CXXFLAGS	+= -Wunused
+CXXFLAGS	+= -Wunused-value
+CXXFLAGS	+= -Wunused-variable
+CXXFLAGS	+= -Wunused-function
+CXXFLAGS	+= -fno-omit-frame-pointer
+CXXFLAGS	+= -fstack-protector-all
+CXXFLAGS	+= -fstack-protector-strong
+CXXFLAGS	+= -Wno-long-long
+CXXFLAGS	+= -Wno-narrowing
+CXXFLAGS	+= -Winit-self
+CXXFLAGS	+= -Wpedantic
 
-#install:
-#	install -m 755 -D $(PROGNAME) $(DESTDIR)/bin/$(PROGNAME)
+ifeq ($(ENABLE_SANITIZER), 1)
+## libasan
+CXXFLAGS	+= -fsanitize=address
+CXXFLAGS	+= -fsanitize=leak
+CXXFLAGS	+= -fsanitize=returns-nonnull-attribute
+CXXFLAGS	+= -fsanitize=enum
+## libubsan
+CXXFLAGS	+= -fsanitize=unreachable
+CXXFLAGS	+= -fsanitize=undefined
+CXXFLAGS	+= -fsanitize=integer-divide-by-zero
+CXXFLAGS	+= -fsanitize=signed-integer-overflow
+CXXFLAGS	+= -fsanitize=object-size
+
+CXXFLAGS	+= -DSANITIZER
+endif
+
+CXXFLAGS	+= $(EXTRA_CXXFLAGS)
+
+LIBS		 =
+ifeq ($(ENABLE_SANITIZER), 1)
+LIBS		+= -lasan
+LIBS		+= -lubsan
+endif
+LIBS		+= -ljsoncpp
+LIBS		+= -lmariadb
+LIBS		+= -llzma
+LIBS		+= -lcurl
+LIBS		+= -lpthread
+LIBS		+= -lexpat
+LIBS		+= $(EXTRA_LIBS)
+
+LDFLAGS		 = $(LIBS)
+LDFLAGS		+= $(EXTRA_LDFLAGS)
+
+all-build: $(BUILD_DIR)/$(PROGNAME)
+all-build-strip: all-build strip
+ifeq ($(DEBUG), 1)
+all: all-build
+else
+all: all-build-strip
+endif
+
+ifeq ($(QUIET), 1)
+quiet = @
+else
+quiet =
+endif
+
+build/src/%.o: src/%.cpp
+	@if ! test -d $$(dirname $@); then mkdir -p $$(dirname $@); fi;
+	@if test "$(quiet)" = "@"; then echo "CXX $< => $@"; fi;
+	$(quiet)$(CXX) $(CXXFLAGS) -MT $@ -MD -MP -c -o $@ $<
+
+$(BUILD_DIR)/$(PROGNAME): $(PROG_OBJS)
+	@if ! test -d $$(dirname $@); then mkdir -p $$(dirname $@); fi;
+	@if test "$(quiet)" = "@"; then echo "CXXLD *.o => $@"; fi;
+	$(quiet)$(LD) $(LDFLAGS) $(PROG_OBJS) -o $@
+
+install: all
+	@if test "$(DESTDIR)" = ""; then \
+		echo -e "\nERROR: No DESTDIR specified.\n"; false;\
+	fi
+	@if test "$(quiet)" = "@"; then echo -e "\nINSTALL $(PROGNAME) => $(DESTDIR)\n"; fi;
+	$(quiet)rm -fr $(DESTDIR)/dl
+	$(quiet)rm -fr $(DESTDIR)/sql
+	$(quiet)rm -f $(DESTDIR)/*
+	$(quiet)install -m 755 -d $(DESTDIR)/dl
+	$(quiet)install -m 755 -d $(DESTDIR)/sql
+	$(quiet)cp -f pw_mariadb  $(DESTDIR)/pw_mariadb
+	$(quiet)cp -f $(PROGNAME).conf  $(DESTDIR)/$(PROGNAME).conf
+	$(quiet)cp -f src/sql/*  $(DESTDIR)/sql
+	$(quiet)install -m 755 -D $(BUILD_DIR)/$(PROGNAME) $(DESTDIR)/$(PROGNAME)
 
 clean:
-	rm -f $(PROGNAME) $(PROG_OBJS) $(PROG_DEPS)
+	rm -rf $(BUILD_DIR)
 
 strip:
-	$(STRIP) $(PROGNAME)
+	@$(STRIP) $(BUILD_DIR)/$(PROGNAME)
 
 -include $(PROG_DEPS)
