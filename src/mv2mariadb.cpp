@@ -510,10 +510,10 @@ long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
 {
 	char* buf = new char[dlSegmentSize];
 	FILE* f = fopen(xzName.c_str(), "r");
-	fread(buf, sizeof(buf), 1, f);
+	fread(buf, dlSegmentSize, 1, f);
 	fclose(f);
 	f = fopen(xz_.c_str(), "w+");
-	fwrite(buf, sizeof(buf), 1, f);
+	fwrite(buf, dlSegmentSize, 1, f);
 	fclose(f);
 	delete [] buf;
 
