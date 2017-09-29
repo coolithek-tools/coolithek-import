@@ -33,6 +33,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #include <iostream>
 #include <fstream>
@@ -893,26 +894,50 @@ sem_t* mySemHandle = NULL;
 void myExit(int val)
 {
 	/* Remove semaphore */
-	if (mySemHandle != NULL)
+	if (mySemHandle != NULL) {
 		sem_close(mySemHandle);
-	if (sem_unlink(mySEMID))
-		perror(mySEMID);
-
+	}
+	sem_unlink(mySEMID);
 	/* exit program */
 	exit(val);
+}
+
+void sighandler (int signum)
+{
+	switch (signum) {
+		case SIGTERM:
+		case SIGINT:
+		case SIGABRT:
+			signal(signum, SIG_IGN);
+			cout << "\nExit with sighandler (" << signum << ")" << endl;
+			myExit(0);
+			break;
+		case SIGUSR1:
+		case SIGUSR2:
+			signal(signum, SIG_IGN);
+			break;
+		default:
+			signal(signum, SIG_IGN);
+			break;
+	}
 }
 
 int main(int argc, char *argv[])
 {
 	g_mainInstance = NULL;
+
+	/* install sighandler */
+	signal(SIGTERM, sighandler);
+	signal(SIGINT,  sighandler);
+	signal(SIGABRT, sighandler);
+	signal(SIGUSR1, sighandler);
+	signal(SIGUSR2, sighandler);
+
 	/* Create semaphore to correctly identify
 	 * the program to prevent multiple instances. */
 	mySemHandle = sem_open(mySEMID, O_CREAT|O_EXCL);
-	if (mySemHandle == SEM_FAILED) {
-		if (errno == EEXIST)
-			printf("[%s] An instance of '%s' is already running, this exits.\n", PROGNAME, PROGNAME);
-		else
-			perror(mySEMID);
+	if ((mySemHandle == SEM_FAILED) && (errno == EEXIST)) {
+		cout << "[" << PROGNAME << "] An instance of '" << PROGNAME << "' is already running, this exits.\n" << endl;
 		return 1;
 	}
 
@@ -922,10 +947,10 @@ int main(int argc, char *argv[])
 	delete g_mainInstance;
 
 	/* Remove semaphore */
-	if (mySemHandle != NULL)
+	if (mySemHandle != NULL) {
 		sem_close(mySemHandle);
-	if (sem_unlink(mySEMID))
-		perror(mySEMID);
+	}
+	sem_unlink(mySEMID);
 
 	return ret;
 }
