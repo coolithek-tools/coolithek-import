@@ -1,0 +1,32 @@
+
+DEBUG			= 1
+ENABLE_SANITIZER	= 1
+QUIET			= 1
+#DESTDIR			=
+EXTRA_CXXFLAGS		= -DPRIV_USERAGENT
+EXTRA_LDFLAGS		= 
+EXTRA_INCLUDES		= 
+EXTRA_LIBS		= 
+
+USE_GCC			= 7
+
+ifeq ($(USE_GCC), 5)
+CXX			= g++-5
+LD			= g++-5
+STRIP			= strip
+STDC++			= -std=c++14
+endif
+
+ifeq ($(USE_GCC), 6)
+CXX			= g++-6
+LD			= g++-6
+STRIP			= strip
+STDC++			= -std=c++14
+endif
+
+ifeq ($(USE_GCC), 7)
+CXX			= g++-7
+LD			= g++-7
+STRIP			= strip
+STDC++			= -std=c++17
+endif

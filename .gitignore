@@ -5,6 +5,6 @@ zz*.sh
 *.log
 *.diff
 *.patch
-priv-settings.mk
+config.mk
 *.o
 *.d

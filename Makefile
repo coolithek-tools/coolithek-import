@@ -22,7 +22,7 @@ PROG_DEPS	 = $(addprefix $(BUILD_DIR)/,$(TMP_DEPS))
 ## (optional) private definitions for DEBUG, EXTRA_CXXFLAGS etc.
 ## --------------------------------
 
--include priv-settings.mk
+-include config.mk
 
 DEBUG			?= 0
 ENABLE_SANITIZER	?= 0
