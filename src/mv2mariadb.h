@@ -32,6 +32,7 @@
 #include <string>
 
 #include "common/helpers.h"
+#include "common/rapidjsonsax.h"
 #include "configfile.h"
 
 using namespace std;
@@ -100,7 +101,14 @@ struct GSettings
 	int    serverListRefreshDays;
 };
 
+string msgHead(string deb="");
+string msgHeadDebug();
+string msgHeadFuncLine();
+
 class CSql;
+
+#define list0Count 5
+#define movieEntryCount 20
 
 class CMV2Mysql
 {
@@ -124,6 +132,54 @@ class CMV2Mysql
 		bool forceConvertData;
 		uint32_t dlSegmentSize;
 
+		int count_parser;
+		int keyCount_parser;
+		TVideoInfoEntry videoInfoEntry;
+		time_t nowTime;
+		uint32_t movieEntries;
+		uint32_t skippedUrls;
+		string videoEntrySqlBuf;
+		string cName;
+		string tName;
+		int cCount;
+		uint32_t writeLen;
+		bool writeStart;
+		uint32_t maxWriteLen;
+		string dbVersionInfo;
+		int dbVersionInfoCount;
+
+		typedef struct {
+			string entry;
+			string asString() { return entry; }
+			const char* asCString() { return entry.c_str(); }
+			int asInt() { return atoi(entry.c_str()); }
+			bool asBool() { return ((entry != "false") && (entry != "FALSE") && (entry != "0")); }
+		} movieEntryElement_t;
+#if 0
+		typedef struct {
+			const char* entry;
+			string asString() { return static_cast<string>(entry); }
+			const char* asCString() { return entry; }
+			int asInt() { return atoi(entry); }
+			bool asBool() { return (!((strcmp(entry, "false") == 0) || (strcmp(entry, "FALSE") == 0) || (strcmp(entry, "0") == 0))); }
+		} movieEntryElement_cstr_t;
+#endif
+		typedef struct {
+			movieEntryElement_t el[list0Count];
+		} list0Entry_t;
+
+		typedef struct {
+			movieEntryElement_t el[movieEntryCount];
+		} list1Entry_t;
+
+		typedef struct {
+			movieEntryElement_t el[movieEntryCount];
+		} movieEntry_t;
+
+		list0Entry_t list0Entry;
+		list1Entry_t list1Entry;
+		movieEntry_t movieEntry;
+
 		string	jsonDbName;
 		string	xzName;
 		string	templateDBFile;
@@ -142,7 +198,13 @@ class CMV2Mysql
 		bool getDownloadUrlList();
 		long getVersionFromXZ(string xz_, string json_);
 		bool downloadDB(string url);
-		bool repairJsonData(string db, string& data);
+		double startTimer();
+		string getTimer_str(double startTime, string txt, int preci=3);
+		double getTimer_double(double startTime);
+		bool readEntry(int index);
+		static void verCallback(int type, string data, int parseMode, CRapidJsonSAX* instance);
+		static void parseCallback(int type, string data, int parseMode, CRapidJsonSAX* instance);
+		void parseCallbackInternal(int type, string data, int parseMode, CRapidJsonSAX* instance);
 		bool parseDB();
 		string convertUrl(string url1, string url2);
 
@@ -160,7 +222,5 @@ class CMV2Mysql
 		CConfigFile* getConfig() { return &configFile; };
 
 };
-
-
 
 #endif // __MV2MYSQL_H__

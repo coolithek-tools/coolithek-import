@@ -38,8 +38,9 @@
 #include <iostream>
 #include <fstream>
 #include <climits>
-
-#include <json/json.h>
+#include <cassert>
+#include <exception>
+#include <iomanip>
 
 #include "sql.h"
 #include "mv2mariadb.h"
@@ -48,9 +49,6 @@
 #include "lzma_dec.h"
 #include "curl.h"
 #include "serverlist.h"
-
-#define DB_1 "-1.json"
-#define DB_2 "-2.json"
 
 CMV2Mysql*		g_mainInstance;
 GSettings		g_settings;
@@ -64,6 +62,21 @@ time_t			g_mvDate;
 string			g_passwordFile;
 
 void myExit(int val);
+
+string msgHead(string deb/*=""*/)
+{
+	return static_cast<string>("[") + g_progName + deb + "] ";
+}
+
+string msgHeadDebug()
+{
+	return msgHead("-debug");
+}
+
+string msgHeadFuncLine()
+{
+	return static_cast<string>("[") + __func__ + ":" + to_string(__LINE__) + "] ";
+}
 
 CMV2Mysql::CMV2Mysql()
 : configFile('\t')
@@ -88,10 +101,28 @@ void CMV2Mysql::Init()
 	createIndexes		= true;
 	loadServerlist		= false;
 	g_mvDate		= time(0);
+	nowTime			= time(0);
 	csql			= NULL;
 	convertData		= true;
 	forceConvertData	= false;
 	dlSegmentSize		= 8192;
+
+	count_parser		= 0;
+	keyCount_parser		= 0;
+	videoInfoEntry.lastest	= INT_MIN;
+	videoInfoEntry.oldest	= INT_MAX;
+	movieEntries		= 0;
+	skippedUrls		= 0;
+	cName			= "";
+	tName			= "";
+	videoEntrySqlBuf	= "";
+	cCount			= 0;
+	writeLen		= 0;
+	writeStart		= true;
+	maxWriteLen		= 1048576-4096;	/* 1MB */
+//	maxWriteLen		= 524288;	/* 512KB */
+	dbVersionInfoCount	= 0;
+
 
 #ifdef PRIV_USERAGENT
 	string agentTmp1	= "MediathekView data to sql - ";
@@ -378,7 +409,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 				tt = g_settings.lastDownloadTime + cronMode*60;
 				xTime = localtime(&tt);
 				strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", xTime);
-				printf("[%s] Next possible download is %s\n", g_progName, buf); fflush(stdout);
+				printf("[%s] Next possible download is %s\n", g_progName, buf);
+				fflush(stdout);
 			}
 			/* The last download is recent enough, exit. */
 			return 0;
@@ -411,7 +443,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 		xzDec->decodeXZ(xzName, jsonDbName);
 		delete xzDec;
 		const char* msg = (downloadOnly) ? "download only" : "no changes";
-		printf("[%s] %s, don't convert to sql database\n", g_progName, msg); fflush(stdout);
+		printf("[%s] %s, don't convert to sql database\n", g_progName, msg);
+		fflush(stdout);
 		return 0;
 	}
 
@@ -431,9 +464,19 @@ void CMV2Mysql::setDbFileNames(string xz)
 	jsonDbName     = workDir + "/" + getFileName(defaultXZ);
 }
 
+void CMV2Mysql::verCallback(int type, string data, int parseMode, CRapidJsonSAX* /*instance*/)
+{
+	if ((parseMode == CRapidJsonSAX::parser_Work) && (type == CRapidJsonSAX::type_String)) {
+		if (g_mainInstance->dbVersionInfoCount == 0) {
+			g_mainInstance->dbVersionInfo = data;
+		}
+		g_mainInstance->dbVersionInfoCount++;
+	}
+}
+
 long CMV2Mysql::getDbVersion(string file)
 {
-	char buf[128];
+	char buf[512];
 	memset(buf, 0, sizeof(buf));
 	FILE* f = fopen(file.c_str(), "r");
 	fread(buf, sizeof(buf)-1, 1, f);
@@ -443,13 +486,27 @@ long CMV2Mysql::getDbVersion(string file)
 	string search = "\"Filmliste\":";
 	size_t pos1 = str1.find(search);
 	if (pos1 != string::npos) {
-		str1 = str1.substr(pos1 + search.length());
-		pos1 = str1.find("\"");
-		size_t pos2 = str1.find("\"", pos1+1);
-		str1 = str1.substr(pos1+1, pos2-pos1-1);
+		pos1 = str1.find(search, pos1+1);
+		if (pos1 != string::npos) {
+			str1 = str1.substr(0, pos1);
+			pos1 = str1.find_last_of(']');
+			str1 = str1.substr(0, pos1+1) + "}";
+			dbVersionInfoCount = 0;
+			dbVersionInfo = "";
 
-		/* 28.08.2017, 05:19 */
-		return str2time("%d.%m.%Y, %H:%M", str1);
+			/* parse versions info */
+			CRapidJsonSAX* rjs = new CRapidJsonSAX();
+			if (rjs != NULL) {
+				rjs->parseString(str1, &verCallback);
+				delete rjs;
+			}
+
+			if (dbVersionInfo.empty())
+				return -1;
+
+			/* 28.08.2017, 05:19 */
+			return str2time("%d.%m.%Y, %H:%M", dbVersionInfo);
+		}
 	}
 	return -1;
 }
@@ -496,8 +553,7 @@ bool CMV2Mysql::getDownloadUrlList()
 			g_settings.downloadServerConnectFail[numberList[i]] = 0;
 			g_settings.lastDownloadServer = numberList[i];
 			return true;
-		}
-		else {
+		} else {
 			g_settings.downloadServerConnectFail[numberList[i]] += 1;
 			if (g_debugPrint)
 				printf(" ERROR\n");
@@ -556,15 +612,13 @@ bool CMV2Mysql::downloadDB(string url)
 		xzDec->decodeXZ(tmpXzNew, tmpJsonNew, false);
 		long newVersion = getDbVersion(tmpJsonNew);
 		delete xzDec;
-	
+
 		if ((oldVersion != -1) && (newVersion != -1)) {
 			if (newVersion > oldVersion)
 				versionOK = false;
-		}
-		else
+		} else
 			versionOK = false;
-	}
-	else
+	} else
 		versionOK = false;
 
 	convertData = (forceConvertData) ? true : !versionOK;
@@ -589,8 +643,7 @@ bool CMV2Mysql::downloadDB(string url)
 		printf("[%s] movie list has been changed\n", g_progName);
 		printf("[%s] curl download %s\n", g_progName, url.c_str());
 		g_settings.lastDownloadTime = time(0);
-	}
-	else {
+	} else {
 		if (g_debugPrint)
 			printf("\n");
 		printf("[%s] movie list is up-to-date, don't download\n", g_progName);
@@ -605,265 +658,240 @@ bool CMV2Mysql::downloadDB(string url)
 	char buf[256];
 	memset(buf, 0, sizeof(buf));
 	strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", versionTime);
-	printf("[%s] movie list version: %s\n", g_progName, buf); fflush(stdout);
+	printf("[%s] movie list version: %s\n", g_progName, buf);
+	fflush(stdout);
 
 	delete curl;
 	return true;
 }
 
-bool CMV2Mysql::repairJsonData(string db, string& data)
+double CMV2Mysql::startTimer()
 {
-	printf("[%s] repair json data...", g_progName); fflush(stdout);
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	return (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+}
 
-	ifstream jsonData(db.c_str(), ifstream::binary);
-	if (!jsonData.is_open()) {
-		printf("\n[%s %s:%d] Failed to open json db %s\n", g_progName, __func__, __LINE__, db.c_str());
-		return false;
+string CMV2Mysql::getTimer_str(double startTime, string txt, int preci/*=3*/)
+{
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	ostringstream tmp;
+	tmp << txt << setprecision(preci) << ((workDTms - startTime) / 1000ULL) << " sec";
+	return tmp.str();
+}
+
+double CMV2Mysql::getTimer_double(double startTime)
+{
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	return ((workDTms - startTime) / 1000ULL);
+}
+
+bool CMV2Mysql::readEntry(int index)
+{
+	if (index == 0) {		/* "Filmliste" 0 */
+		string tmp  = list0Entry.el[1].asString();
+		g_mvDate    = str2time("%d.%m.%Y, %H:%M", tmp);
+		g_mvVersion = list0Entry.el[3].asString();
+	} else if (index == 1) {	/* "Filmliste" 1 */
+		/* Not currently used */
+	} else {			/* "X" (data)    */
+		TVideoEntry videoEntry;
+		videoEntry.channel = movieEntry.el[0].asString();
+		if ((videoEntry.channel != "") && (videoEntry.channel != cName)) {
+			if (cName != "") {
+				videoInfo.push_back(videoInfoEntry);
+			}
+			cName = videoEntry.channel;
+			cCount = 0;
+			videoInfoEntry.lastest = INT_MIN;
+			videoInfoEntry.oldest = INT_MAX;
+		}
+
+		videoEntry.theme		= movieEntry.el[1].asString();
+		if (videoEntry.theme != "") {
+			tName = videoEntry.theme;
+		} else
+			videoEntry.theme	= tName;
+
+		videoEntry.title		= movieEntry.el[2].asString();
+		videoEntry.duration		= duration2time(movieEntry.el[5].asString());
+		videoEntry.size_mb		= movieEntry.el[6].asInt();
+		videoEntry.description		= movieEntry.el[7].asString();
+		videoEntry.url			= movieEntry.el[8].asString();
+		videoEntry.website		= movieEntry.el[9].asString();
+		videoEntry.subtitle		= movieEntry.el[10].asString();
+		videoEntry.url_rtmp		= convertUrl(videoEntry.url, movieEntry.el[11].asString());
+		videoEntry.url_small		= convertUrl(videoEntry.url, movieEntry.el[12].asString());
+		videoEntry.url_rtmp_small	= convertUrl(videoEntry.url, movieEntry.el[13].asString());
+		videoEntry.url_hd		= convertUrl(videoEntry.url, movieEntry.el[14].asString());
+		videoEntry.url_rtmp_hd		= convertUrl(videoEntry.url, movieEntry.el[15].asString());
+
+		if ((videoEntry.url.empty())	    &&
+				(videoEntry.url_rtmp.empty())       &&
+				(videoEntry.url_small.empty())      &&
+				(videoEntry.url_rtmp_small.empty()) &&
+				(videoEntry.url_hd.empty())	 &&
+				(videoEntry.url_rtmp_hd.empty())) {
+			skippedUrls++;
+			return true;
+		}
+
+		videoEntry.date_unix		= movieEntry.el[16].asInt();
+		if ((videoEntry.date_unix == 0) && (movieEntry.el[3].asString() != "") && (movieEntry.el[4].asString() != "")) {
+			videoEntry.date_unix = str2time("%d.%m.%Y %H:%M:%S", movieEntry.el[3].asString() + " " + movieEntry.el[4].asString());
+		}
+		if ((videoEntry.date_unix > 0) && (epoch > 0)) {
+			time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default all data) */
+			if (videoEntry.date_unix < (nowTime - maxDiff))
+				return true;
+		}
+
+		videoEntry.url_history		= movieEntry.el[17].asString();
+		videoEntry.geo			= movieEntry.el[18].asString();
+		videoEntry.new_entry		= movieEntry.el[19].asBool();
+		videoEntry.channel		= cName;
+		cCount++;
+		videoInfoEntry.channel		= cName;
+		videoInfoEntry.count		= cCount;
+		videoInfoEntry.lastest		= max(videoEntry.date_unix, videoInfoEntry.lastest);
+		if (videoEntry.date_unix != 0)
+			videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
+
+		movieEntries++;
+		if (g_debugPrint) {
+			if ((movieEntries % 32) == 0) {
+				cout << msgHeadDebug() << "Processed entries: " << setfill(' ') << setw(6);
+				cout << movieEntries << ", skip (no url) " << skippedUrls << "\r";
+			}
+			if ((movieEntries % 32*8) == 0)
+				cout.flush();
+		}
+		string vQuery = csql->createVideoTableQuery(movieEntries, writeStart, &videoEntry);
+		writeStart = false;
+
+		if ((writeLen + vQuery.length()) >= maxWriteLen) {
+			videoEntrySqlBuf += ";\n";
+			csql->executeSingleQueryString(videoEntrySqlBuf);
+			vQuery = csql->createVideoTableQuery(movieEntries, true, &videoEntry);
+			videoEntrySqlBuf = "";
+			writeLen = 0;
+		}
+		videoEntrySqlBuf += vQuery;
+		writeLen = videoEntrySqlBuf.length();
 	}
-
-	jsonData.seekg(0, jsonData.end);
-	int length    = jsonData.tellg();
-	int lengthNew = length+3;
-	jsonData.seekg(0, jsonData.beg);
-	char* buffer = new char[lengthNew];
-	if (buffer == NULL) {
-		printf("\n[%s %s:%d] memory error\n", g_progName, __func__, __LINE__);
-		jsonData.close();
-		return false;
-	}
-
-	jsonData.read(&(buffer[1]), length);
-	jsonData.close();
-	buffer[0] = '[';
-	buffer[lengthNew-2] = ']';
-	buffer[lengthNew-1] = '\0';
-
-/*
-],"X" => ]},{"X"
-*/
-	const char* cRet1 = cstr_replace("],\"X\"", "]},{\"X\"", buffer);
-	delete [] buffer;
-	if (cRet1 == NULL) {
-		printf("\n[%s %s:%d] cstr_replace error\n", g_progName, __func__, __LINE__);
-		return false;
-	}
-
-/*
-],"Filmliste" => ]},{"Filmliste"
-*/
-	const char* cRet2 = cstr_replace("],\"Filmliste\"", "]},{\"Filmliste\"", cRet1);
-	delete [] cRet1;
-	if (cRet2 == NULL) {
-		printf("\n[%s %s:%d] cstr_replace error\n", g_progName, __func__, __LINE__);
-		return false;
-	}
-	data = (string)cRet2;
-	delete [] cRet2;
-
-	/* save repaired data (file is not needed) */
-	ofstream out((db + ".json").c_str(), ofstream::binary);
-	out.write (data.c_str(), data.size());
-	out.close();
-	printf("done.\n"); fflush(stdout);
-
 	return true;
+}
+
+void CMV2Mysql::parseCallback(int type, string data, int parseMode, CRapidJsonSAX* instance)
+{
+	g_mainInstance->parseCallbackInternal(type, data, parseMode, instance);
+}
+
+void CMV2Mysql::parseCallbackInternal(int type, string data, int parseMode, CRapidJsonSAX* /*instance*/)
+{
+	if (parseMode == CRapidJsonSAX::parser_Work) {
+		if (type == CRapidJsonSAX::type_String) {
+			if (count_parser > 1) {		// "X"
+				movieEntry.el[keyCount_parser].entry = data;
+			} else if (count_parser == 0) {	// "Filmliste" 0
+				list0Entry.el[keyCount_parser].entry = data;
+			} else if (count_parser == 1) {	// "Filmliste" 1
+				list1Entry.el[keyCount_parser].entry = data;
+			}
+			keyCount_parser++;
+		} else if (type == CRapidJsonSAX::type_StartArray) {
+			keyCount_parser = 0;
+		} else if (type == CRapidJsonSAX::type_EndArray) {
+			readEntry(count_parser);
+			keyCount_parser = 0;
+			count_parser++;
+		}
+	}
 }
 
 bool CMV2Mysql::parseDB()
 {
+	cout << msgHead() << "parse json db & write temporary database...";
+	cout.flush();
+
 	/* extract movie list */
 	CLZMAdec* xzDec = new CLZMAdec();
 	xzDec->decodeXZ(xzName, jsonDbName);
 	delete xzDec;
 
-	string jData;
-	if (!repairJsonData(jsonDbName, jData))
-		return false;
-
-	printf("[%s] parse json db & write temporary database...", g_progName); fflush(stdout);
-
-	string errMsg = "";
-	Json::Value root;
-	bool ok = parseJsonFromString(jData, &root, &errMsg);
-	if (!ok) {
-		printf("\nFailed to parse JSON\n");
-		printf("[%s:%d] %s\n", __func__, __LINE__, errMsg.c_str());
-		return false;
-	}
-
-	string cName = "";
-	string tName = "";
-	int cCount = 0;
-	uint32_t entrys = 0;
-	TVideoInfoEntry videoInfoEntry;
-	videoInfoEntry.lastest = INT_MIN;
-	videoInfoEntry.oldest = INT_MAX;
-	time_t nowTime = time(NULL);
-	struct timeval t1;
-	double nowDTms;
-	string vMultiQuery = "";
-	string vQuery = "";
-	uint32_t writeLen = 0;
-	bool writeStart = true;
-	uint32_t maxWriteLen = 1048576-4096;  /* 1MB */
-	uint32_t skipUrl = 0;
-
-	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
-	csql->setUsedDatabase(VIDEO_DB_TMP_1);
-
-	string sqlBuff = "";
-	if (multiQuery)
-		csql->setServerMultiStatementsOff();
-
-	gettimeofday(&t1, NULL);
-	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	double parseStartTime = startTimer();
 	if (g_debugPrint) {
 		printCursorOff();
-		printf("\n");
+		cout << endl;
 	}
 
-	for (unsigned int i = 0; i < root.size(); ++i) {
-		Json::Value data;
-		if (i == 0) {		/* head 1 */
-			data = root[i].get("Filmliste", "");
-			string tmp  = data[1].asString();
-			g_mvDate    = str2time("%d.%m.%Y, %H:%M", tmp);
-			g_mvVersion = data[3].asString();
-		}
-		else if (i == 1) {	/* head 2 */
-			data = root[i].get("Filmliste", "");
-		}
-		else {			/* data   */
-			data = root[i].get("X", "");
-			TVideoEntry videoEntry;
-			videoEntry.channel		= data[0].asString();
-			if ((videoEntry.channel != "") && (videoEntry.channel != cName)) {
-				if (cName != "") {
-					videoInfo.push_back(videoInfoEntry);
-				}
-				cName = videoEntry.channel;
-				cCount = 0;
-				videoInfoEntry.lastest = INT_MIN;
-				videoInfoEntry.oldest = INT_MAX;
-			}
+	/* startup operations sql db */
+	csql->executeSingleQueryString("START TRANSACTION;");
+	csql->executeSingleQueryString("SET autocommit = 0;");
+	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
+	csql->setUsedDatabase(VIDEO_DB_TMP_1);
+	if (multiQuery) {
+		csql->setServerMultiStatementsOff();
+	}
 
-			videoEntry.theme		= data[1].asString();
-			if (videoEntry.theme != "") {
-				tName = videoEntry.theme;
-			}
-			else
-				 videoEntry.theme	= tName;
-
-			videoEntry.title		= data[2].asString();
-			videoEntry.duration		= duration2time(data[5].asString());
-			videoEntry.size_mb		= atoi(data[6].asCString());
-			videoEntry.description		= data[7].asString();
-			videoEntry.url			= data[8].asString();
-			videoEntry.website		= data[9].asString();
-			videoEntry.subtitle		= data[10].asString();
-			videoEntry.url_rtmp		= convertUrl(videoEntry.url, data[11].asString());
-			videoEntry.url_small		= convertUrl(videoEntry.url, data[12].asString());
-			videoEntry.url_rtmp_small	= convertUrl(videoEntry.url, data[13].asString());
-			videoEntry.url_hd		= convertUrl(videoEntry.url, data[14].asString());
-			videoEntry.url_rtmp_hd		= convertUrl(videoEntry.url, data[15].asString());
-
-			if ((videoEntry.url.empty())            &&
-			    (videoEntry.url_rtmp.empty())       &&
-			    (videoEntry.url_small.empty())      &&
-			    (videoEntry.url_rtmp_small.empty()) &&
-			    (videoEntry.url_hd.empty())         &&
-			    (videoEntry.url_rtmp_hd.empty())) {
-				skipUrl++;
-				continue;
-			}
-
-			videoEntry.date_unix		= atoi((data[16].asCString()));
-			if ((videoEntry.date_unix == 0) && (data[3].asString() != "") && (data[4].asString() != "")) {
-				videoEntry.date_unix = str2time("%d.%m.%Y %H:%M:%S", data[3].asString() + " " + data[4].asString());
-			}
-			if ((videoEntry.date_unix > 0) && (epoch > 0)) {
-				time_t maxDiff = (24*3600) * epoch; /* Not older than 'epoch' days (default all data) */
-				if (videoEntry.date_unix < (nowTime - maxDiff))
-					continue;
-			}
-
-			videoEntry.url_history		= data[17].asString();
-			videoEntry.geo			= data[18].asString();
-			videoEntry.new_entry		= ((data[19].asString() == "true") || (data[19].asString() == "TRUE")) ? true : false;
-
-			videoEntry.channel		= cName;
-			cCount++;
-			videoInfoEntry.channel		= cName;
-			videoInfoEntry.count		= cCount;
-			videoInfoEntry.lastest		= max(videoEntry.date_unix, videoInfoEntry.lastest);
-			if (videoEntry.date_unix != 0)
-				videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
-
-			entrys++;
-			if (g_debugPrint) {
-				if ((entrys % 32) == 0)
-					printf("[%s-debug] Processed entries: %6d, skip (no url) %d\r", g_progName, entrys, skipUrl);
-				if ((entrys % 32*8) == 0)
-					fflush(stdout);
-			}
-			vQuery = csql->createVideoTableQuery(entrys, writeStart, &videoEntry);
-			writeStart = false;
-
-			if ((writeLen + vQuery.length()) >= maxWriteLen) {
-				sqlBuff += ";\n";
-				csql->executeSingleQueryString(sqlBuff);
-				vQuery = csql->createVideoTableQuery(entrys, true, &videoEntry);
-				sqlBuff = "";
-				writeLen = 0;
-			}
-			sqlBuff += vQuery;
-			writeLen = sqlBuff.length();
-		}
+	/* parse the movie list */
+	CRapidJsonSAX* rjs = new CRapidJsonSAX();
+	if (rjs != NULL) {
+		rjs->setFileStreamBufSize(4194304);	// 4MB
+		rjs->parseFile(jsonDbName, &parseCallback);
+		delete rjs;
 	}
 
 	if (g_debugPrint) {
-		printf("[%s-debug] Processed entries: %6d, skip (no url) %d\r", g_progName, entrys, skipUrl); fflush(stdout);
+		cout << msgHeadDebug() << "Processed entries: " << setfill(' ') << setw(6);
+		cout << movieEntries << ", skip (no url) " << skippedUrls << "\r";
 	}
 
-	if (!sqlBuff.empty()) {
-		csql->executeSingleQueryString(sqlBuff);
-		sqlBuff.clear();
+	/* final operations sql db */
+	if (!videoEntrySqlBuf.empty()) {
+		csql->executeSingleQueryString(videoEntrySqlBuf);
+		videoEntrySqlBuf.clear();
 	}
-	if (multiQuery)
+	if (multiQuery) {
 		csql->setServerMultiStatementsOn();
+	}
+	videoInfo.push_back(videoInfoEntry);
+	string itq = csql->createInfoTableQuery(&videoInfo, movieEntries);
+	csql->executeMultiQueryString(itq);
+	csql->executeSingleQueryString("COMMIT;");
+	csql->executeSingleQueryString("SET autocommit = 1;");
 
 	if (g_debugPrint) {
 		printCursorOn();
-		printf("\n");
 	}
-
-	videoInfo.push_back(videoInfoEntry);
-	string itq = csql->createInfoTableQuery(&videoInfo, entrys);
-	csql->executeMultiQueryString(itq);
-
-	if (!g_debugPrint)
-		printf("\n");
-
-	if (entrys < 1000) {
-		printf("\n[%s] Video list too small (%d entrys), no transfer to the database.\n", g_progName, entrys); fflush(stdout);
+	cout << endl;
+	if (movieEntries < 1000) {
+		cout << endl << msgHead() << "Video list too small (" << movieEntries;
+		cout << " entries), no transfer to the database." << endl;
+		cout.flush();
 		return false;
 	}
 
 	csql->renameDB();
-	if (createIndexes)
+	if (createIndexes) {
 		csql->createIndex();
+	}
 
-	if (skipUrl > 0)
-		printf("[%s] skiped entrys (no url) %d\n", g_progName, skipUrl);
+	if (skippedUrls > 0) {
+		cout << msgHead() << "skiped entrys (no url) " << skippedUrls << endl;
+	}
 	string days_s = (epoch > 0) ? to_string(epoch) + " days" : "all data";
-	printf("[%s] all tasks done (%u (%s) / %u entrys)\n", g_progName, entrys, days_s.c_str(), (uint32_t)(root.size()-2));
-	gettimeofday(&t1, NULL);
-	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	double workDTus = (double)t1.tv_sec*1000000ULL + ((double)t1.tv_usec);
-	int32_t workTime = (int32_t)((workDTms - nowDTms) / 1000);
-	double entryTime_us = (workDTus - nowDTms*1000) / entrys;
-	printf("[%s] duration: %d sec (%.03f msec/entry)\n", g_progName, workTime, entryTime_us/1000);
-	fflush(stdout);
+	string parseEndTime = getTimer_str(parseStartTime, "");
+	double entryTime = (getTimer_double(parseStartTime) / movieEntries) * 1000;
+	cout << msgHead() << "all tasks done (" << movieEntries << " (";
+	cout << days_s << ") / " << count_parser-2 << " entries)" << endl;
+	cout << msgHead() << "duration: " << parseEndTime << " (";
+	cout << setprecision(3) << entryTime << " msec/entry)" << endl;
+	cout.flush();
 
 	return true;
 }
@@ -881,8 +909,7 @@ string CMV2Mysql::convertUrl(string url1, string url2)
 	if (pos != string::npos) {
 		int pos1 = atoi(url2.substr(0, pos).c_str());
 		ret = url1.substr(0, pos1) + url2.substr(pos+1);
-	}
-	else
+	} else
 		ret = url2;
 
 	return ret;

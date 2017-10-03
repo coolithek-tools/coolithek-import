@@ -116,6 +116,7 @@ bool CSql::intCopyOrRenameDatabase(string fromDB, string toDB, string characterS
 		query += "DROP DATABASE IF EXISTS `" + fromDB + "`;";
 	}
 	query += "COMMIT;";
+	query += "SET autocommit = 1;";
 	bool ret = executeMultiQueryString(query);
 
 	setUsedDatabase(oldUsedDB);
