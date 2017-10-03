@@ -14,7 +14,10 @@
 #include <cctype>
 #include <clocale>
 #include <algorithm>
+
+#ifdef USE_JSONCPP
 #include <json/json.h>
+#endif
 
 using namespace std;
 
@@ -52,8 +55,12 @@ bool file_exists(const char *filename);
 
 string endlbr();
 string readFile(string file);
+
+#ifdef USE_JSONCPP
 bool parseJsonFromFile(string& jFile, Json::Value *root, string *errMsg);
 bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg);
+#endif
+
 int safeStrToInt(string val);
 void printCursorOff();
 void printCursorOn();

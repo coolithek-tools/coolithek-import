@@ -106,7 +106,6 @@ ifeq ($(ENABLE_SANITIZER), 1)
 LIBS		+= -lasan
 LIBS		+= -lubsan
 endif
-LIBS		+= -ljsoncpp
 LIBS		+= -lmariadb
 LIBS		+= -llzma
 LIBS		+= -lcurl
@@ -146,7 +145,7 @@ install: all
 		echo -e "\nERROR: No DESTDIR specified.\n"; false;\
 	fi
 	@if test "$(quiet)" = "@"; then echo -e "\nINSTALL $(PROGNAME) => $(DESTDIR)\n"; fi;
-	$(quiet)rm -fr $(DESTDIR)/dl
+#	$(quiet)rm -fr $(DESTDIR)/dl
 	$(quiet)rm -fr $(DESTDIR)/sql
 	$(quiet)rm -f $(DESTDIR)/$(PROGNAME)
 	$(quiet)install -m 755 -d $(DESTDIR)/dl

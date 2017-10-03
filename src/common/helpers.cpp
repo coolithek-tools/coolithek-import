@@ -335,6 +335,7 @@ string readFile(string file)
 	return ret_s;
 }
 
+#ifdef USE_JSONCPP
 bool parseJsonFromFile(string& jFile, Json::Value *root, string *errMsg)
 {
 	string jData = readFile(jFile);
@@ -359,6 +360,7 @@ bool parseJsonFromString(string& jData, Json::Value *root, string *errMsg)
 	delete reader;
 	return ret;
 }
+#endif
 
 int safeStrToInt(string val)
 {
@@ -377,10 +379,10 @@ int safeStrToInt(string val)
 
 void printCursorOff()
 {
-	printf("\033[?25l");
+	cout << "\033[?25l";
 }
 
 void printCursorOn()
 {
-	printf("\033[?25h");
+	cout << "\033[?25h";
 }
