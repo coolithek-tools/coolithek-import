@@ -6,6 +6,7 @@ PROG_SOURCES = \
 	src/$(PROGNAME).cpp \
 	src/common/filehelpers.cpp \
 	src/common/helpers.cpp \
+	src/common/rapidjsonsax.cpp \
 	src/configfile.cpp \
 	src/curl.cpp \
 	src/lzma_dec.cpp \
