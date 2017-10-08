@@ -40,6 +40,50 @@ bool CSql::databaseExists(string db)
 	return ret;
 }
 
+uint32_t CSql::getTableEntries(string db, string table)
+{
+	string tmpUsedDb = getUsedDatabase();
+	setUsedDatabase(db);
+	uint32_t ret = 0;
+        string query = "SELECT COUNT(id) AS anz FROM " + table + ";";
+	executeSingleQueryString(query);
+	MYSQL_RES* result = mysql_store_result(mysqlCon);
+	MYSQL_ROW row;
+	if (mysql_num_fields(result) > 0) {
+		row = mysql_fetch_row(result);
+		if ((row != NULL) && (row[0] != NULL))
+			ret = atoi(row[0]);
+	}
+	mysql_free_result(result);
+	
+	if ((!tmpUsedDb.empty()) && (tmpUsedDb != db))
+		setUsedDatabase(tmpUsedDb);
+
+	return ret;
+}
+
+uint32_t CSql::getLastIndex(string db, string table)
+{
+	string tmpUsedDb = getUsedDatabase();
+	setUsedDatabase(db);
+	uint32_t ret = 0;
+	string query = "SELECT MAX(id) FROM " + table;
+	executeSingleQueryString(query);
+	MYSQL_RES* result = mysql_store_result(mysqlCon);
+	MYSQL_ROW row;
+	if (mysql_num_fields(result) > 0) {
+		row = mysql_fetch_row(result);
+		if ((row != NULL) && (row[0] != NULL))
+			ret = atoi(row[0]);
+	}
+	mysql_free_result(result);
+	
+	if ((!tmpUsedDb.empty()) && (tmpUsedDb != db))
+		setUsedDatabase(tmpUsedDb);
+
+	return ret;
+}
+
 string CSql::getUsedDatabase()
 {
 	string ret_s = "";

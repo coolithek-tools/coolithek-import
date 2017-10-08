@@ -74,8 +74,8 @@ class CSql
 //			memset(checkStringBuff, 0, sizeof(checkStringBuff));
 			memset(checkStringBuff, 0, size_+1);
 			mysql_real_escape_string(mysqlCon, checkStringBuff, str2.c_str(), str2.length());
-			str = (string)checkStringBuff;
-			return "'" + str + "'";
+			str2 = (string)checkStringBuff;
+			return "'" + str2 + "'";
 		}
 		inline string checkInt(int i) { return to_string(i); }
 
@@ -86,18 +86,19 @@ class CSql
 		~CSql();
 		bool connectMysql();
 
-		string createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry);
+		string createVideoTableQuery(int count, bool startRow, bool replace, TVideoEntry* videoEntry);
 		string createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size);
 		bool executeSingleQueryString__(string query, const char* func, int line);
 		bool executeMultiQueryString__(string query, const char* func, int line);
 		bool createVideoDbFromTemplate(string name);
 		void checkTemplateDB(string name);
-		bool createIndex();
+		bool createIndex(bool drop);
 		bool createTemplateDB(string name, bool quiet = false);
 		bool renameDB();
 		void setServerMultiStatementsOff__(const char* func, int line);
 		void setServerMultiStatementsOn__(const char* func, int line);
 		string getDefaultCharacterSet() { return dbDefaultCharacterSet; };
+		uint32_t checkEntryForUpdate(TVideoEntry* videoEntry);
 
 	/* sql-common.cpp */
 	/* TODO: Separate class for shared sql functions */
@@ -106,6 +107,8 @@ class CSql
 
 	public:
 		bool databaseExists(string db);
+		uint32_t getTableEntries(string db, string table);
+		uint32_t getLastIndex(string db, string table);
 		string getUsedDatabase();
 		void setUsedDatabase(string db);
 		bool copyDatabase(string fromDB, string toDB, string characterSet, bool noData=false);

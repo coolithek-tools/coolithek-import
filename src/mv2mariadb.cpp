@@ -24,6 +24,7 @@
 #define DBVERSION "3.0"
 #define PROGNAME "mv2mariadb"
 #define DEFAULTXZ "mv-movielist.xz"
+#define DEFAULTDIFFXZ "mv-difflist.xz"
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -91,6 +92,7 @@ void CMV2Mysql::Init()
 	g_progVersion		= "v" PROGVERSION;
 	g_dbVersion		= DBVERSION;
 	defaultXZ		= (string)DEFAULTXZ;
+	defaultDiffXZ		= (string)DEFAULTDIFFXZ;
 
 	epoch			= 0; /* all data */
 	cronMode		= 0;
@@ -107,12 +109,14 @@ void CMV2Mysql::Init()
 	forceConvertData	= false;
 	dlSegmentSize		= 8192;
 	diffMode		= false;
+	insertEntries		= 0;
 
 	count_parser		= 0;
 	keyCount_parser		= 0;
 	videoInfoEntry.lastest	= INT_MIN;
 	videoInfoEntry.oldest	= INT_MAX;
 	movieEntries		= 0;
+	movieEntriesCounter	= 0;
 	skippedUrls		= 0;
 	cName			= "";
 	tName			= "";
@@ -144,6 +148,7 @@ void CMV2Mysql::Init()
 CMV2Mysql::~CMV2Mysql()
 {
 	configFile.setModifiedFlag(true);
+	unlink(configFileName.c_str());
 	saveSetup(configFileName, true);
 	videoInfo.clear();
 	if (csql != NULL)
@@ -172,16 +177,18 @@ int CMV2Mysql::loadSetup(string fname)
 	g_settings.testMode		= configFile.getBool  ("testMode",             true);
 
 	/* database */
-	g_settings.videoDbBaseName	= configFile.getString("videoDbBaseName",      "mediathek_1");
-	g_settings.videoDb		= configFile.getString("videoDb",              g_settings.videoDbBaseName);
-	g_settings.videoDbTmp1		= configFile.getString("videoDbTmp1",          g_settings.videoDbBaseName + "_tmp1");
-	g_settings.videoDbTemplate	= configFile.getString("videoDbTemplate",      g_settings.videoDbBaseName + "_template");
-	g_settings.videoDb_TableVideo	= configFile.getString("videoDb_TableVideo",   "video");
-	g_settings.videoDb_TableInfo	= configFile.getString("videoDb_TableInfo",    "channelinfo");
-	g_settings.videoDb_TableVersion	= configFile.getString("videoDb_TableVersion", "version");
-	VIDEO_DB_TMP_1			= g_settings.videoDbTmp1;
+	g_settings.videoDbBaseName		= configFile.getString("videoDbBaseName",          "mediathek_1");
+	g_settings.videoDb			= configFile.getString("videoDb",                  g_settings.videoDbBaseName);
+	g_settings.videoDbTmp1			= configFile.getString("videoDbTmp1",              g_settings.videoDbBaseName + "_tmp1");
+	g_settings.videoDbTemplate		= configFile.getString("videoDbTemplate",          g_settings.videoDbBaseName + "_template");
+	g_settings.videoDb_TableVideo		= configFile.getString("videoDb_TableVideo",       "video");
+	g_settings.videoDb_TableInfo		= configFile.getString("videoDb_TableInfo",        "channelinfo");
+	g_settings.videoDb_TableVersion		= configFile.getString("videoDb_TableVersion",     "version");
+	VIDEO_DB_TMP_1				= g_settings.videoDbTmp1;
+	VIDEO_DB				= g_settings.videoDb;
 	if (g_settings.testMode) {
 		VIDEO_DB_TMP_1	+= g_settings.testLabel;
+		VIDEO_DB	+= g_settings.testLabel;
 	}
 
 	/* download server */
@@ -207,13 +214,13 @@ void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 	configFile.setBool  ("testMode",             g_settings.testMode);
 
 	/* database */
-	configFile.setString("videoDbBaseName",      g_settings.videoDbBaseName);
-	configFile.setString("videoDb",              g_settings.videoDb);
-	configFile.setString("videoDbTmp1",          g_settings.videoDbTmp1);
-	configFile.setString("videoDbTemplate",      g_settings.videoDbTemplate);
-	configFile.setString("videoDb_TableVideo",   g_settings.videoDb_TableVideo);
-	configFile.setString("videoDb_TableInfo",    g_settings.videoDb_TableInfo);
-	configFile.setString("videoDb_TableVersion", g_settings.videoDb_TableVersion);
+	configFile.setString("videoDbBaseName",          g_settings.videoDbBaseName);
+	configFile.setString("videoDb",                  g_settings.videoDb);
+	configFile.setString("videoDbTmp1",              g_settings.videoDbTmp1);
+	configFile.setString("videoDbTemplate",          g_settings.videoDbTemplate);
+	configFile.setString("videoDb_TableVideo",       g_settings.videoDb_TableVideo);
+	configFile.setString("videoDb_TableInfo",        g_settings.videoDb_TableInfo);
+	configFile.setString("videoDb_TableVersion",     g_settings.videoDb_TableVersion);
 
 	/* download server */
 	saveDownloadServerSetup();
@@ -224,6 +231,7 @@ void CMV2Mysql::saveSetup(string fname, bool quiet/*=false*/)
 	/* server list */
 	configFile.setString("serverListUrl",         g_settings.serverListUrl);
 	configFile.setInt64 ("serverListLastRefresh", (int64_t)(g_settings.serverListLastRefresh));
+	configFile.setString("serverListLastRefreshStr", time2str(g_settings.serverListLastRefresh));
 	configFile.setInt32 ("serverListRefreshDays", g_settings.serverListRefreshDays);
 
 	if (configFile.getModifiedFlag())
@@ -240,6 +248,9 @@ void CMV2Mysql::loadDownloadServerSetup()
 	g_settings.lastDownloadServer			= max(count, 1);
 	g_settings.lastDownloadServer			= min(count, g_settings.downloadServerCount);
 	g_settings.lastDownloadTime			= (time_t)configFile.getInt64("lastDownloadTime", 0);
+	g_settings.lastDiffDownloadTime			= (time_t)configFile.getInt64("lastDiffDownloadTime", 0);
+	g_settings.aktFileName				= configFile.getString("aktFileName", "Filmliste-akt.xz");
+	g_settings.diffFileName				= configFile.getString("diffFileName", "Filmliste-diff.xz");
 	g_settings.downloadServerConnectFailsMax	= configFile.getInt32("downloadServerConnectFailsMax", 3);
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
 		memset(cfg_key, 0, sizeof(cfg_key));
@@ -257,6 +268,11 @@ void CMV2Mysql::saveDownloadServerSetup()
 	configFile.setInt32 ("downloadServerCount",           g_settings.downloadServerCount);
 	configFile.setInt32 ("lastDownloadServer",            g_settings.lastDownloadServer);
 	configFile.setInt64 ("lastDownloadTime",              (int64_t)(g_settings.lastDownloadTime));
+	configFile.setString("lastDownloadTimeStr",           time2str(g_settings.lastDownloadTime));
+	configFile.setInt64 ("lastDiffDownloadTime",          (int64_t)(g_settings.lastDiffDownloadTime));
+	configFile.setString("lastDiffDownloadTimeStr",       time2str(g_settings.lastDiffDownloadTime));
+	configFile.setString("aktFileName",                   g_settings.aktFileName);
+	configFile.setString("diffFileName",                  g_settings.diffFileName);
 	configFile.setInt32 ("downloadServerConnectFailsMax", g_settings.downloadServerConnectFailsMax);
 	for (int i = 1; i <= g_settings.downloadServerCount; i++) {
 		memset(cfg_key, 0, sizeof(cfg_key));
@@ -400,19 +416,20 @@ int CMV2Mysql::run(int argc, char *argv[])
 	}
 
 	if (cronMode > 0) {
-		if ((time(0) - g_settings.lastDownloadTime) < (cronMode*60)) {
+		time_t lastDlTime = (diffMode) ? g_settings.lastDiffDownloadTime : g_settings.lastDownloadTime;
+		if ((time(0) - lastDlTime) < (cronMode*60)) {
 			if (cronModeEcho) {
 				printf("[%s] The last download is recent enough.\n", g_progName);
 
 				char buf[256];
 				memset(buf, 0, sizeof(buf));
-				time_t tt = g_settings.lastDownloadTime;
+				time_t tt = lastDlTime;
 				struct tm* xTime = localtime(&tt);
 				strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", xTime);
 				printf("[%s] Time of  last download is %s\n", g_progName, buf);
 
 				memset(buf, 0, sizeof(buf));
-				tt = g_settings.lastDownloadTime + cronMode*60;
+				tt = lastDlTime + cronMode*60;
 				xTime = localtime(&tt);
 				strftime(buf, sizeof(buf)-1, "%d.%m.%Y %H:%M", xTime);
 				printf("[%s] Next possible download is %s\n", g_progName, buf);
@@ -467,7 +484,7 @@ void CMV2Mysql::setDbFileNames(string xz)
 	path0          = getRealPath(path0);
 	string file0   = getBaseName(xz);
 	xzName         = path0 + "/" + file0;
-	jsonDbName     = workDir + "/" + getFileName(defaultXZ);
+	jsonDbName     = workDir + "/" + ((diffMode) ? getFileName(defaultDiffXZ) : getFileName(defaultXZ));
 }
 
 void CMV2Mysql::verCallback(int type, string data, int parseMode, CRapidJsonSAX* /*instance*/)
@@ -553,6 +570,8 @@ bool CMV2Mysql::getDownloadUrlList()
 		if (g_settings.downloadServerConnectFail[numberList[i]] >= g_settings.downloadServerConnectFailsMax)
 			continue;
 		string dlServer = g_settings.downloadServer[numberList[i]];
+		string tmpPath  = getPathName(dlServer);
+		dlServer        = tmpPath + "/" + ((diffMode) ? g_settings.diffFileName : g_settings.aktFileName);
 		if (g_debugPrint)
 			printf("[%s-debug] check %s", g_progName, dlServer.c_str());
 		if (downloadDB(dlServer)) {
@@ -589,7 +608,7 @@ long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
 bool CMV2Mysql::downloadDB(string url)
 {
 	if ((xzName.empty()) || (jsonDbName.empty())) {
-		string xz = getPathName(workDir) + "/" + defaultXZ;
+		string xz = getPathName(workDir) + "/" + ((diffMode) ? defaultDiffXZ : defaultXZ);
 		setDbFileNames(xz);
 	}
 
@@ -629,9 +648,6 @@ bool CMV2Mysql::downloadDB(string url)
 
 	convertData = (forceConvertData) ? true : !versionOK;
 
-	CFileHelpers cfh;
-	cfh.removeDir(workDir.c_str());
-	cfh.createDir(workDir, 0755);
 	unlink(tmpXzOld.c_str());
 	unlink(tmpXzNew.c_str());
 	unlink(tmpJsonOld.c_str());
@@ -648,7 +664,10 @@ bool CMV2Mysql::downloadDB(string url)
 			printf("\n");
 		printf("[%s] movie list has been changed\n", g_progName);
 		printf("[%s] curl download %s\n", g_progName, url.c_str());
-		g_settings.lastDownloadTime = time(0);
+		if (diffMode)
+			g_settings.lastDiffDownloadTime = time(0);
+		else
+			g_settings.lastDownloadTime = time(0);
 	} else {
 		if (g_debugPrint)
 			printf("\n");
@@ -698,6 +717,7 @@ double CMV2Mysql::getTimer_double(double startTime)
 
 bool CMV2Mysql::readEntry(int index)
 {
+	static bool replaceEntry = false;
 	if (index == 0) {		/* "Filmliste" 0 */
 		string tmp  = list0Entry.el[1].asString();
 		g_mvDate    = str2time("%d.%m.%Y, %H:%M", tmp);
@@ -706,6 +726,8 @@ bool CMV2Mysql::readEntry(int index)
 		/* Not currently used */
 	} else {			/* "X" (data)    */
 		TVideoEntry videoEntry;
+		videoEntry.replaceID = 0;
+		videoEntry.update = 0;
 		videoEntry.channel = movieEntry.el[0].asString();
 		if ((videoEntry.channel != "") && (videoEntry.channel != cName)) {
 			if (cName != "") {
@@ -768,21 +790,41 @@ bool CMV2Mysql::readEntry(int index)
 			videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
 
 		movieEntries++;
+		if (diffMode)
+			movieEntriesCounter++;
+		else
+			movieEntriesCounter = movieEntries;
 		if (g_debugPrint) {
 			if ((movieEntries % 32) == 0) {
 				cout << msgHeadDebug() << "Processed entries: " << setfill(' ') << setw(6);
-				cout << movieEntries << ", skip (no url) " << skippedUrls << "\r";
+				cout << movieEntriesCounter << ", skip (no url) " << skippedUrls << "\r";
 			}
 			if ((movieEntries % 32*8) == 0)
 				cout.flush();
 		}
-		string vQuery = csql->createVideoTableQuery(movieEntries, writeStart, &videoEntry);
+		
+		uint32_t entryIdx = movieEntries;
+		if (diffMode) {
+			uint32_t id_ = csql->checkEntryForUpdate(&videoEntry);
+			if (id_ > 0) {
+				entryIdx = id_;
+				replaceEntry = true;
+				videoEntry.update = nowTime;
+			}
+			else {
+				// INSERT NEW
+				videoEntriesNew.push_back(videoEntry);
+				return true;
+			}
+		}
+
+		string vQuery = csql->createVideoTableQuery(entryIdx, writeStart, replaceEntry, &videoEntry);
 		writeStart = false;
 
 		if ((writeLen + vQuery.length()) >= maxWriteLen) {
 			videoEntrySqlBuf += ";\n";
 			csql->executeSingleQueryString(videoEntrySqlBuf);
-			vQuery = csql->createVideoTableQuery(movieEntries, true, &videoEntry);
+			vQuery = csql->createVideoTableQuery(entryIdx, true, replaceEntry, &videoEntry);
 			videoEntrySqlBuf = "";
 			writeLen = 0;
 		}
@@ -824,6 +866,8 @@ bool CMV2Mysql::parseDB()
 	cout << msgHead() << "parse json db & write temporary database...";
 	cout.flush();
 
+	videoEntriesNew.clear();
+
 	/* extract movie list */
 	CLZMAdec* xzDec = new CLZMAdec();
 	xzDec->decodeXZ(xzName, jsonDbName);
@@ -838,10 +882,18 @@ bool CMV2Mysql::parseDB()
 	/* startup operations sql db */
 	csql->executeSingleQueryString("START TRANSACTION;");
 	csql->executeSingleQueryString("SET autocommit = 0;");
-	csql->createVideoDbFromTemplate(VIDEO_DB_TMP_1);
-	csql->setUsedDatabase(VIDEO_DB_TMP_1);
+	string usedDB = (diffMode) ? VIDEO_DB : VIDEO_DB_TMP_1;
+	if (!diffMode) {
+		csql->createVideoDbFromTemplate(usedDB);
+	}
+	csql->setUsedDatabase(usedDB);
+
 	if (multiQuery) {
 		csql->setServerMultiStatementsOff();
+	}
+
+	if (diffMode) {
+		movieEntries = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
 	}
 
 	/* parse the movie list */
@@ -854,7 +906,7 @@ bool CMV2Mysql::parseDB()
 
 	if (g_debugPrint) {
 		cout << msgHeadDebug() << "Processed entries: " << setfill(' ') << setw(6);
-		cout << movieEntries << ", skip (no url) " << skippedUrls << "\r";
+		cout << movieEntriesCounter << ", skip (no url) " << skippedUrls << "\r";
 	}
 
 	/* final operations sql db */
@@ -862,6 +914,11 @@ bool CMV2Mysql::parseDB()
 		csql->executeSingleQueryString(videoEntrySqlBuf);
 		videoEntrySqlBuf.clear();
 	}
+
+	if ((diffMode) && (!videoEntriesNew.empty())) {
+		insertEntries = insertNewEntries();
+	}
+
 	if (multiQuery) {
 		csql->setServerMultiStatementsOn();
 	}
@@ -882,9 +939,11 @@ bool CMV2Mysql::parseDB()
 		return false;
 	}
 
-	csql->renameDB();
+	if (!diffMode) {
+		csql->renameDB();
+	}
 	if (createIndexes) {
-		csql->createIndex();
+		csql->createIndex(diffMode);
 	}
 
 	if (skippedUrls > 0) {
@@ -892,14 +951,60 @@ bool CMV2Mysql::parseDB()
 	}
 	string days_s = (epoch > 0) ? to_string(epoch) + " days" : "all data";
 	string parseEndTime = getTimer_str(parseStartTime, "");
-	double entryTime = (getTimer_double(parseStartTime) / movieEntries) * 1000;
-	cout << msgHead() << "all tasks done (" << movieEntries << " (";
+	double entryTime = (getTimer_double(parseStartTime) / movieEntriesCounter) * 1000;
+	cout << msgHead() << "all tasks done (" << movieEntriesCounter << " (";
 	cout << days_s << ") / " << count_parser-2 << " entries)" << endl;
+
+	if (diffMode) {
+		uint32_t aktEntries = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
+		cout << msgHead() << "diffMode: " << movieEntriesCounter << " changed, (";
+		cout << (movieEntriesCounter - insertEntries) << " updated, " << insertEntries;
+		cout << " new, " << aktEntries << " all)" << endl;
+	}
+
 	cout << msgHead() << "duration: " << parseEndTime << " (";
 	cout << setprecision(3) << entryTime << " msec/entry)" << endl;
 	cout.flush();
 
 	return true;
+}
+
+size_t CMV2Mysql::insertNewEntries()
+{
+	if (g_debugPrint) {
+		cout << endl;
+	}
+	cout << msgHead() << "insert new entries...";
+	videoEntrySqlBuf.clear();
+	writeLen = 0;
+	int entryIdx = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
+	writeStart = true;
+	size_t i = 0;
+	for (i = 0; i < videoEntriesNew.size(); i++) {
+		videoEntriesNew[i].new_entry = true;
+		videoEntriesNew[i].update = nowTime;
+		entryIdx++;
+		string vQuery = csql->createVideoTableQuery(entryIdx, writeStart, false, &(videoEntriesNew[i]));
+		writeStart = false;
+
+		if ((writeLen + vQuery.length()) >= maxWriteLen) {
+			videoEntrySqlBuf += ";\n";
+			csql->executeSingleQueryString(videoEntrySqlBuf);
+			vQuery = csql->createVideoTableQuery(entryIdx, true, false, &(videoEntriesNew[i]));
+			videoEntrySqlBuf = "";
+			writeLen = 0;
+		}
+		videoEntrySqlBuf += vQuery;
+		writeLen = videoEntrySqlBuf.length();
+	}
+	videoEntriesNew.clear();
+	if (!videoEntrySqlBuf.empty()) {
+		csql->executeSingleQueryString(videoEntrySqlBuf);
+		videoEntrySqlBuf.clear();
+	}
+
+	cout << "done.";
+	return i;
 }
 
 string CMV2Mysql::convertUrl(string url1, string url2)

@@ -46,6 +46,7 @@ CREATE TABLE `@@@tab_video@@@` (
   `geo` varchar(1024) DEFAULT NULL,
   `parse_m3u8` int(11) NOT NULL DEFAULT '0',
   `new_entry` tinyint(1) DEFAULT NULL,
+  `update` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 

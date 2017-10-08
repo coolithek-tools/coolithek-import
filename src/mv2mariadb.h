@@ -39,6 +39,7 @@ using namespace std;
 
 typedef struct VideoEntry
 {
+	int    replaceID;
 	string channel;
 	string theme;
 	string title;
@@ -57,6 +58,7 @@ typedef struct VideoEntry
 	string url_history;
 	string geo;
 	bool   new_entry;
+	int    update;
 } TVideoEntry;
 
 typedef struct VideoInfoEntry
@@ -90,7 +92,10 @@ struct GSettings
 	int    downloadServerCount;
 	int    lastDownloadServer;
 	time_t lastDownloadTime;
+	time_t lastDiffDownloadTime;
 	int    downloadServerConnectFailsMax;
+	string aktFileName;
+	string diffFileName;
 
 	/* password file */
 	string passwordFile;
@@ -128,6 +133,7 @@ class CMV2Mysql
 		bool downloadOnly;
 		bool loadServerlist;
 		string defaultXZ;
+		string defaultDiffXZ;
 		bool convertData;
 		bool forceConvertData;
 		uint32_t dlSegmentSize;
@@ -138,6 +144,7 @@ class CMV2Mysql
 		TVideoInfoEntry videoInfoEntry;
 		time_t nowTime;
 		uint32_t movieEntries;
+		uint32_t movieEntriesCounter;
 		uint32_t skippedUrls;
 		string videoEntrySqlBuf;
 		string cName;
@@ -148,6 +155,7 @@ class CMV2Mysql
 		uint32_t maxWriteLen;
 		string dbVersionInfo;
 		int dbVersionInfoCount;
+		size_t insertEntries;
 
 		typedef struct {
 			string entry;
@@ -180,12 +188,14 @@ class CMV2Mysql
 		list0Entry_t list0Entry;
 		list1Entry_t list1Entry;
 		movieEntry_t movieEntry;
+		vector<TVideoEntry> videoEntriesNew;
 
 		string	jsonDbName;
 		string	xzName;
 		string	templateDBFile;
 		vector<TVideoInfoEntry> videoInfo;
 		string VIDEO_DB_TMP_1;
+		string VIDEO_DB;
 		string userAgentCheck;
 		string userAgentDownload;
 		string userAgentListCheck;
@@ -206,6 +216,7 @@ class CMV2Mysql
 		static void verCallback(int type, string data, int parseMode, CRapidJsonSAX* instance);
 		static void parseCallback(int type, string data, int parseMode, CRapidJsonSAX* instance);
 		void parseCallbackInternal(int type, string data, int parseMode, CRapidJsonSAX* instance);
+		size_t insertNewEntries();
 		bool parseDB();
 		string convertUrl(string url1, string url2);
 

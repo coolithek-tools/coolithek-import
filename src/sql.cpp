@@ -134,11 +134,12 @@ bool CSql::connectMysql()
 	return true;
 }
 
-string CSql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoEntry)
+string CSql::createVideoTableQuery(int count, bool startRow, bool replace, TVideoEntry* videoEntry)
 {
 	string entry = "";
 	if (startRow) {
-		entry += "INSERT INTO " + VIDEO_TABLE + " VALUES ";
+		entry += (replace) ? "REPLACE" : "INSERT";
+		entry += " INTO " + VIDEO_TABLE + " VALUES ";
 	}
 	else {
 		entry += ",";
@@ -163,7 +164,8 @@ string CSql::createVideoTableQuery(int count, bool startRow, TVideoEntry* videoE
 	entry += checkString(videoEntry->url_history, 1024) + ",";
 	entry += checkString(videoEntry->geo, 1024) + ",";
 	entry += checkInt(0) + ",";
-	entry += checkInt((int)videoEntry->new_entry);
+	entry += checkInt((int)videoEntry->new_entry) + ",";
+	entry += checkInt((int)videoEntry->update);
 	entry += ")";
 
 	return entry;
@@ -272,14 +274,39 @@ void CSql::checkTemplateDB(string name)
 		setServerMultiStatementsOn();
 }
 
-bool CSql::createIndex()
+bool CSql::createIndex(bool drop)
 {
 	struct timeval t1;
-	gettimeofday(&t1, NULL);
-	double nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	printf("[%s] create indexes on database...", g_progName); fflush(stdout);
+	double nowDTms;
+	double workDTms;
 
 	string sql = "";
+	gettimeofday(&t1, NULL);
+	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	if (drop) {
+		printf("[%s] update indexes on database...", g_progName);
+		fflush(stdout);
+
+		sql = "";
+		sql += "START TRANSACTION;";
+		sql += "SET autocommit = 0;";
+		sql += "USE `" + VIDEO_DB + "`;";
+
+		sql += "ALTER TABLE `" + VIDEO_TABLE + "` DROP INDEX `channel`;";
+		sql += "ALTER TABLE `" + VIDEO_TABLE + "` DROP INDEX `date_unix`;";
+		sql += "ALTER TABLE `" + VIDEO_TABLE + "` DROP INDEX `duration`;";
+		sql += "ALTER TABLE `" + VIDEO_TABLE + "` DROP INDEX `theme`;";
+		sql += "ALTER TABLE `" + VIDEO_TABLE + "` DROP INDEX `title`;";
+
+		sql += "COMMIT;";
+		executeMultiQueryString(sql);
+	}
+	else {
+		printf("[%s] create indexes on database...", g_progName);
+		fflush(stdout);
+	}
+
+	sql = "";
 	sql += "START TRANSACTION;";
 	sql += "SET autocommit = 0;";
 	sql += "USE `" + VIDEO_DB + "`;";
@@ -295,11 +322,10 @@ bool CSql::createIndex()
 	sql += "ALTER TABLE `" + VIDEO_TABLE + "` ADD FULLTEXT INDEX `theme` (`theme`);";
 #endif
 	sql += "COMMIT;";
-
 	bool ret = executeMultiQueryString(sql);
 
 	gettimeofday(&t1, NULL);
-	double workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
+	workDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
 	printf("done (%.02f sec)\n", (workDTms-nowDTms)/1000); fflush(stdout);
 
 	return ret;
@@ -369,6 +395,36 @@ void CSql::setServerMultiStatementsOn__(const char* func, int line)
 {
 	if (mysql_set_server_option(mysqlCon, MYSQL_OPTION_MULTI_STATEMENTS_ON) != 0)
 		show_error(func, line);
+}
+
+uint32_t CSql::checkEntryForUpdate(TVideoEntry* videoEntry)
+{
+	string sChannel = checkString(videoEntry->channel, 128);
+	string sTheme   = checkString(videoEntry->theme, 1024);
+	string sTitle   = checkString(videoEntry->title, 1024);
+	string sDate    = checkInt(videoEntry->date_unix);
+
+	string sql = "";
+	sql += "SELECT MAX(id) FROM ( ";
+		sql += "SELECT id, theme, title FROM " + g_settings.videoDb_TableVideo;
+		sql += " WHERE ( channel LIKE " + sChannel;
+		sql += " AND date_unix = " + sDate + " )";
+	sql += " ) AS dingens WHERE ( theme LIKE " + sTheme + " AND title LIKE " + sTitle + " );";
+
+	executeSingleQueryString(sql);
+
+	MYSQL_RES* result = mysql_store_result(mysqlCon);
+	MYSQL_ROW row;
+	uint32_t id_ = 0;
+	uint32_t rowsCount = mysql_num_fields(result);
+	if (rowsCount > 0) {
+		row = mysql_fetch_row(result);
+		if ((row != NULL) && (row[0] != NULL))
+			id_ = atoi(row[0]);
+	}
+	mysql_free_result(result);
+
+	return id_;
 }
 
 /* TODO: Separate class for shared sql functions */
