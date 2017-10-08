@@ -90,6 +90,15 @@ time_t str2time2(string format, string t)
 	return mktime(ptm);
 }
 
+string time2str(time_t time, string format/* = "%d.%m.%Y - %H:%M"*/)
+{
+	struct tm* time_tm = localtime(&time);
+	char buf[256];
+	memset(buf, 0, sizeof(buf));
+	strftime(buf, sizeof(buf)-1, format.c_str(), time_tm);
+	return static_cast<string>(buf);
+}
+
 string trim(string &str, const string &trimChars /*= " \n\r\t"*/)
 {
 	string result = str.erase(str.find_last_not_of(trimChars) + 1);

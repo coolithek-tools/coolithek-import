@@ -25,6 +25,7 @@ time_t duration2time(string t);
 int duration2sec(string t, string forceFormat = "");
 time_t str2time(string format, string t);
 time_t str2time2(string format, string t);
+string time2str(time_t time, string format = "%d.%m.%Y - %H:%M");
 
 string trim(string &str, const string &trimChars = " \n\r\t");
 
