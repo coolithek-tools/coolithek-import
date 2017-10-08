@@ -131,6 +131,7 @@ class CMV2Mysql
 		bool convertData;
 		bool forceConvertData;
 		uint32_t dlSegmentSize;
+		bool diffMode;
 
 		int count_parser;
 		int keyCount_parser;
