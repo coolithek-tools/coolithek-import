@@ -311,6 +311,16 @@ void CMV2Mysql::printHelp()
 	printf("  -h | --help		 => Display this help screen and exit\n");
 }
 
+void CMV2Mysql::checkDiffMode()
+{
+	string format  = "%d.%m.%Y";
+	string today_S = time2str(nowTime, format) + " 00:00";
+	format += " %H:%M";
+	time_t today = str2time(format, today_S);
+	if (g_settings.lastDownloadTime < today)
+		diffMode = false;
+}
+
 int CMV2Mysql::run(int argc, char *argv[])
 {
 	/* Initialization random number generator */
@@ -414,6 +424,9 @@ int CMV2Mysql::run(int argc, char *argv[])
 				break;
 		}
 	}
+
+	if (diffMode)
+		checkDiffMode();
 
 	if (cronMode > 0) {
 		time_t lastDlTime = (diffMode) ? g_settings.lastDiffDownloadTime : g_settings.lastDownloadTime;

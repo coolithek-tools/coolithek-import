@@ -219,6 +219,7 @@ class CMV2Mysql
 		size_t insertNewEntries();
 		bool parseDB();
 		string convertUrl(string url1, string url2);
+		void checkDiffMode();
 
 		int loadSetup(string fname);
 		void saveSetup(string fname, bool quiet = false);
