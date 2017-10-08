@@ -333,25 +333,32 @@ bool CSql::createIndex(bool drop)
 
 bool CSql::createTemplateDB(string name, bool quiet/* = false*/)
 {
-	size_t size = 0;
-	const char* buf = NULL;
+	size_t size  = 0;
+	size_t size_ = 0;
+	char* buf = NULL;
 	if (file_exists(name.c_str())) {
 		FILE* f = fopen(name.c_str(), "r");
 		if (f != NULL) {
 			size = file_size(name.c_str());
-			buf = new char[size];
-			size = fread((void*)buf, size, 1, f);
+			buf = new char[static_cast<unsigned long>(size+1)];
+			if (buf == NULL) {
+				printf("\n[%s] memory error read database template [%s]\n", g_progName, name.c_str());
+				fclose(f);
+				myExit(1);
+			}
+			size_ = fread((void*)buf, size, 1, f);
+			buf[size] = '\0';
 			fclose(f);
 		}
 
 	}
-	if (size == 0) {
+	if (size_ == 0) {
 		printf("\n[%s] error read database template [%s]\n", g_progName, name.c_str());
 		if (buf != NULL)
 			delete [] buf;
 		myExit(1);
 	}
-	string sql = (string)buf;
+	string sql = static_cast<string>(buf);
 	delete [] buf;
 
 	string search = "@@@db_template@@@";
