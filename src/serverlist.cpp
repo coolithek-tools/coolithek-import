@@ -81,7 +81,7 @@ void CServerlist::clearConfig()
 		snprintf(cfg_key, sizeof(cfg_key), "downloadServerConnectFail_%02d", i);
 		g_mainInstance->getConfig()->deleteKey(cfg_key);
 	}
-	for (int i = 0; i < MAX_DL_SERVER_COUNT; i++) {
+	for (int i = 0; i < static_cast<int>(maxDownloadServerCount); i++) {
 		g_settings.downloadServer[i] = "";
 		g_settings.downloadServerConnectFail[i] = 0;
 	}
@@ -106,7 +106,7 @@ void CServerlist::getServerList()
 		if (!serverList_v.empty())
 			clearConfig();
 		for (size_t i = 0; i < serverList_v.size(); i++) {
-			if (i >= MAX_DL_SERVER_COUNT)
+			if (i >= static_cast<int>(maxDownloadServerCount))
 				break;
 			g_settings.downloadServerCount++;
 			g_settings.downloadServer[i+1] = serverList_v[i];

@@ -92,7 +92,7 @@ class CSql
 		bool executeMultiQueryString__(string query, const char* func, int line);
 		bool createVideoDbFromTemplate(string name);
 		void checkTemplateDB(string name);
-		bool createIndex(bool drop);
+		bool createIndex(int drop);
 		bool createTemplateDB(string name, bool quiet = false);
 		bool renameDB();
 		void setServerMultiStatementsOff__(const char* func, int line);

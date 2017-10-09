@@ -34,77 +34,9 @@
 #include "common/helpers.h"
 #include "common/rapidjsonsax.h"
 #include "configfile.h"
+#include "types.h"
 
 using namespace std;
-
-typedef struct VideoEntry
-{
-	int    replaceID;
-	string channel;
-	string theme;
-	string title;
-	int    duration;
-	int    size_mb;
-	string description;
-	string url;
-	string website;
-	string subtitle;
-	string url_rtmp;
-	string url_small;
-	string url_rtmp_small;
-	string url_hd;
-	string url_rtmp_hd;
-	int    date_unix;
-	string url_history;
-	string geo;
-	bool   new_entry;
-	int    update;
-} TVideoEntry;
-
-typedef struct VideoInfoEntry
-{
-	string channel;
-	int    count;
-	int    lastest;
-	int    oldest;
-} TVideoInfoEntry;
-
-#define MAX_DL_SERVER_COUNT 32
-
-struct GSettings
-{
-	/* test mode */
-	string testLabel;
-	bool   testMode;
-
-	/* database */
-	string videoDbBaseName;
-	string videoDb;
-	string videoDbTmp1;
-	string videoDbTemplate;
-	string videoDb_TableVideo;
-	string videoDb_TableInfo;
-	string videoDb_TableVersion;
-
-	/* download server */
-	string downloadServer[MAX_DL_SERVER_COUNT];
-	int    downloadServerConnectFail[MAX_DL_SERVER_COUNT];
-	int    downloadServerCount;
-	int    lastDownloadServer;
-	time_t lastDownloadTime;
-	time_t lastDiffDownloadTime;
-	int    downloadServerConnectFailsMax;
-	string aktFileName;
-	string diffFileName;
-
-	/* password file */
-	string passwordFile;
-
-	/* server list */
-	string serverListUrl;
-	time_t serverListLastRefresh;
-	int    serverListRefreshDays;
-};
 
 string msgHead(string deb="");
 string msgHeadDebug();
@@ -137,7 +69,7 @@ class CMV2Mysql
 		bool convertData;
 		bool forceConvertData;
 		uint32_t dlSegmentSize;
-		bool diffMode;
+		int diffMode;
 
 		int count_parser;
 		int keyCount_parser;

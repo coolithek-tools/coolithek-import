@@ -108,7 +108,7 @@ void CMV2Mysql::Init()
 	convertData		= true;
 	forceConvertData	= false;
 	dlSegmentSize		= 8192;
-	diffMode		= false;
+	diffMode		= diffMode_none;
 	insertEntries		= 0;
 
 	count_parser		= 0;
@@ -243,7 +243,7 @@ void CMV2Mysql::loadDownloadServerSetup()
 	char cfg_key[256];
 	int count					= configFile.getInt32("downloadServerCount", 1);
 	g_settings.downloadServerCount			= max(count, 1);
-	g_settings.downloadServerCount			= min(count, MAX_DL_SERVER_COUNT);
+	g_settings.downloadServerCount			= min(count, static_cast<int>(maxDownloadServerCount));
 	count						= configFile.getInt32("lastDownloadServer", 1);
 	g_settings.lastDownloadServer			= max(count, 1);
 	g_settings.lastDownloadServer			= min(count, g_settings.downloadServerCount);
@@ -318,7 +318,7 @@ void CMV2Mysql::checkDiffMode()
 	format += " %H:%M";
 	time_t today = str2time(format, today_S);
 	if (g_settings.lastDownloadTime < today)
-		diffMode = false;
+		diffMode = diffMode_none;
 }
 
 int CMV2Mysql::run(int argc, char *argv[])
@@ -363,7 +363,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{"force-convert",	noParam,       NULL, 'f'},
 		{"cron-mode",		requiredParam, NULL, 'c'},
 		{"cron-mode-echo",	noParam,       NULL, 'C'},
-		{"diff-mode",		noParam,       NULL, 'D'},
+		{"diff-mode",		requiredParam, NULL, 'D'},
 		{"no-indexes",		noParam,       NULL, 'n'},
 		{"update",		noParam,       NULL, '1'},
 		{"download-only",	noParam,       NULL, '2'},
@@ -374,7 +374,7 @@ int CMV2Mysql::run(int argc, char *argv[])
 		{NULL,			0,             NULL,  0 }
 	};
 	int c, opt;
-	while ((opt = getopt_long(argc, argv, "e:fc:CDn123dvh?", long_options, &c)) >= 0) {
+	while ((opt = getopt_long(argc, argv, "e:fc:CD:n123dvh?", long_options, &c)) >= 0) {
 		switch (opt) {
 			case 'e':
 				/* >=0 and <=24800 */
@@ -391,7 +391,8 @@ int CMV2Mysql::run(int argc, char *argv[])
 				cronModeEcho = true;
 				break;
 			case 'D':
-				diffMode = true;
+				/* >=1 and <=2 */
+				diffMode = max(min(atoi(optarg), 2), 1);
 				break;
 			case 'n':
 				createIndexes = false;
@@ -425,11 +426,11 @@ int CMV2Mysql::run(int argc, char *argv[])
 		}
 	}
 
-	if (diffMode)
+	if (diffMode > diffMode_none)
 		checkDiffMode();
 
 	if (cronMode > 0) {
-		time_t lastDlTime = (diffMode) ? g_settings.lastDiffDownloadTime : g_settings.lastDownloadTime;
+		time_t lastDlTime = (diffMode > diffMode_none) ? g_settings.lastDiffDownloadTime : g_settings.lastDownloadTime;
 		if ((time(0) - lastDlTime) < (cronMode*60)) {
 			if (cronModeEcho) {
 				printf("[%s] The last download is recent enough.\n", g_progName);
@@ -497,7 +498,7 @@ void CMV2Mysql::setDbFileNames(string xz)
 	path0          = getRealPath(path0);
 	string file0   = getBaseName(xz);
 	xzName         = path0 + "/" + file0;
-	jsonDbName     = workDir + "/" + ((diffMode) ? getFileName(defaultDiffXZ) : getFileName(defaultXZ));
+	jsonDbName     = workDir + "/" + ((diffMode > diffMode_none) ? getFileName(defaultDiffXZ) : getFileName(defaultXZ));
 }
 
 void CMV2Mysql::verCallback(int type, string data, int parseMode, CRapidJsonSAX* /*instance*/)
@@ -584,7 +585,7 @@ bool CMV2Mysql::getDownloadUrlList()
 			continue;
 		string dlServer = g_settings.downloadServer[numberList[i]];
 		string tmpPath  = getPathName(dlServer);
-		dlServer        = tmpPath + "/" + ((diffMode) ? g_settings.diffFileName : g_settings.aktFileName);
+		dlServer        = tmpPath + "/" + ((diffMode > diffMode_none) ? g_settings.diffFileName : g_settings.aktFileName);
 		if (g_debugPrint)
 			printf("[%s-debug] check %s", g_progName, dlServer.c_str());
 		if (downloadDB(dlServer)) {
@@ -621,7 +622,7 @@ long CMV2Mysql::getVersionFromXZ(string xz_, string json_)
 bool CMV2Mysql::downloadDB(string url)
 {
 	if ((xzName.empty()) || (jsonDbName.empty())) {
-		string xz = getPathName(workDir) + "/" + ((diffMode) ? defaultDiffXZ : defaultXZ);
+		string xz = getPathName(workDir) + "/" + ((diffMode > diffMode_none) ? defaultDiffXZ : defaultXZ);
 		setDbFileNames(xz);
 	}
 
@@ -677,7 +678,7 @@ bool CMV2Mysql::downloadDB(string url)
 			printf("\n");
 		printf("[%s] movie list has been changed\n", g_progName);
 		printf("[%s] curl download %s\n", g_progName, url.c_str());
-		if (diffMode)
+		if (diffMode > diffMode_none)
 			g_settings.lastDiffDownloadTime = time(0);
 		else
 			g_settings.lastDownloadTime = time(0);
@@ -803,7 +804,7 @@ bool CMV2Mysql::readEntry(int index)
 			videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
 
 		movieEntries++;
-		if (diffMode)
+		if (diffMode > diffMode_none)
 			movieEntriesCounter++;
 		else
 			movieEntriesCounter = movieEntries;
@@ -817,7 +818,7 @@ bool CMV2Mysql::readEntry(int index)
 		}
 		
 		uint32_t entryIdx = movieEntries;
-		if (diffMode) {
+		if (diffMode > diffMode_none) {
 			uint32_t id_ = csql->checkEntryForUpdate(&videoEntry);
 			if (id_ > 0) {
 				entryIdx = id_;
@@ -895,8 +896,8 @@ bool CMV2Mysql::parseDB()
 	/* startup operations sql db */
 	csql->executeSingleQueryString("START TRANSACTION;");
 	csql->executeSingleQueryString("SET autocommit = 0;");
-	string usedDB = (diffMode) ? VIDEO_DB : VIDEO_DB_TMP_1;
-	if (!diffMode) {
+	string usedDB = (diffMode > diffMode_none) ? VIDEO_DB : VIDEO_DB_TMP_1;
+	if (diffMode == diffMode_none) {
 		csql->createVideoDbFromTemplate(usedDB);
 	}
 	csql->setUsedDatabase(usedDB);
@@ -905,7 +906,7 @@ bool CMV2Mysql::parseDB()
 		csql->setServerMultiStatementsOff();
 	}
 
-	if (diffMode) {
+	if (diffMode > diffMode_none) {
 		movieEntries = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
 	}
 
@@ -928,7 +929,7 @@ bool CMV2Mysql::parseDB()
 		videoEntrySqlBuf.clear();
 	}
 
-	if ((diffMode) && (!videoEntriesNew.empty())) {
+	if ((diffMode > diffMode_none) && (!videoEntriesNew.empty())) {
 		insertEntries = insertNewEntries();
 	}
 
@@ -952,7 +953,7 @@ bool CMV2Mysql::parseDB()
 		return false;
 	}
 
-	if (!diffMode) {
+	if (diffMode == diffMode_none) {
 		csql->renameDB();
 	}
 	if (createIndexes) {
@@ -968,7 +969,7 @@ bool CMV2Mysql::parseDB()
 	cout << msgHead() << "all tasks done (" << movieEntriesCounter << " (";
 	cout << days_s << ") / " << count_parser-2 << " entries)" << endl;
 
-	if (diffMode) {
+	if (diffMode > diffMode_none) {
 		uint32_t aktEntries = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
 		cout << msgHead() << "diffMode: " << movieEntriesCounter << " changed, (";
 		cout << (movieEntriesCounter - insertEntries) << " updated, " << insertEntries;

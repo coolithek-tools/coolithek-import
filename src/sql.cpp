@@ -36,6 +36,7 @@
 #include "sql.h"
 #include "common/helpers.h"
 #include "common/filehelpers.h"
+#include "types.h"
 
 extern GSettings		g_settings;
 extern const char*		g_progName;
@@ -274,7 +275,7 @@ void CSql::checkTemplateDB(string name)
 		setServerMultiStatementsOn();
 }
 
-bool CSql::createIndex(bool drop)
+bool CSql::createIndex(int drop)
 {
 	struct timeval t1;
 	double nowDTms;
@@ -283,7 +284,7 @@ bool CSql::createIndex(bool drop)
 	string sql = "";
 	gettimeofday(&t1, NULL);
 	nowDTms = (double)t1.tv_sec*1000ULL + ((double)t1.tv_usec)/1000ULL;
-	if (drop) {
+	if (drop > diffMode_none) {
 		printf("[%s] update indexes on database...", g_progName);
 		fflush(stdout);
 
