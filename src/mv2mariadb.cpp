@@ -985,10 +985,7 @@ bool CMV2Mysql::parseDB()
 
 size_t CMV2Mysql::insertNewEntries()
 {
-	if (g_debugPrint) {
-		cout << endl;
-	}
-	cout << msgHead() << "insert new entries...";
+	cout << endl << msgHead() << "insert new entries...";
 	videoEntrySqlBuf.clear();
 	writeLen = 0;
 //	int entryIdx = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
