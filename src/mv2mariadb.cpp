@@ -113,7 +113,7 @@ void CMV2Mysql::Init()
 
 	count_parser		= 0;
 	keyCount_parser		= 0;
-	videoInfoEntry.lastest	= INT_MIN;
+	videoInfoEntry.latest	= INT_MIN;
 	videoInfoEntry.oldest	= INT_MAX;
 	movieEntries		= 0;
 	movieEntriesCounter	= 0;
@@ -749,7 +749,7 @@ bool CMV2Mysql::readEntry(int index)
 			}
 			cName = videoEntry.channel;
 			cCount = 0;
-			videoInfoEntry.lastest = INT_MIN;
+			videoInfoEntry.latest = INT_MIN;
 			videoInfoEntry.oldest = INT_MAX;
 		}
 
@@ -799,7 +799,7 @@ bool CMV2Mysql::readEntry(int index)
 		cCount++;
 		videoInfoEntry.channel		= cName;
 		videoInfoEntry.count		= cCount;
-		videoInfoEntry.lastest		= max(videoEntry.date_unix, videoInfoEntry.lastest);
+		videoInfoEntry.latest		= max(videoEntry.date_unix, videoInfoEntry.latest);
 		if (videoEntry.date_unix != 0)
 			videoInfoEntry.oldest	= min(videoEntry.date_unix, videoInfoEntry.oldest);
 

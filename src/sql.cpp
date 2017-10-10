@@ -192,13 +192,13 @@ void CSql::updateInfoTable(vector<TVideoInfoEntry> &videoInfoUpdate, vector<TVid
 		vie.id      = atoi(row[0]);
 		vie.channel = static_cast<string>(row[1]);
 		vie.count   = atoi(row[2]);
-		vie.lastest = atoi(row[3]);
+		vie.latest  = atoi(row[3]);
 		vie.oldest  = atoi(row[4]);
 		size_t idx  = searchInfoEntry(vie.channel, videoInfo);
 		if (idx > 0) {
 			idx        -= 1;
 			vie.count  += videoInfo[idx].count;
-			vie.lastest = max(vie.lastest, videoInfo[idx].lastest);
+			vie.latest  = max(vie.latest, videoInfo[idx].latest);
 			vie.oldest  = min(vie.oldest, videoInfo[idx].oldest);
 		}
 		videoInfoUpdate.push_back(vie);
@@ -222,15 +222,15 @@ string CSql::createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size, 
 
 	for (vector<TVideoInfoEntry>::iterator it = videoInfoTmp->begin(); it != videoInfoTmp->end(); ++it) {
 		if (diffMode > diffMode_none) {
-			entry += "REPLACE INTO " + INFO_TABLE + " (id, channel, count, lastest, oldest) VALUES (";
+			entry += "REPLACE INTO " + INFO_TABLE + " (id, channel, count, latest, oldest) VALUES (";
 			entry += checkInt(it->id) + ", ";
 		}
 		else {
-			entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
+			entry += "INSERT INTO " + INFO_TABLE + " (channel, count, latest, oldest) VALUES (";
 		}
 		entry += checkString(it->channel, 256) + ", ";
 		entry += checkInt(it->count) + ", ";
-		entry += checkInt(it->lastest) + ", ";
+		entry += checkInt(it->latest) + ", ";
 		entry += checkInt(it->oldest);
 		entry += ");";
 	}

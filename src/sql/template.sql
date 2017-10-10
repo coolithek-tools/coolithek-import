@@ -8,7 +8,7 @@ CREATE TABLE `@@@tab_channelinfo@@@` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `channel` varchar(256) DEFAULT NULL,
   `count` int(11) DEFAULT NULL,
-  `lastest` int(11) DEFAULT NULL,
+  `latest` int(11) DEFAULT NULL,
   `oldest` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
