@@ -78,6 +78,8 @@ class CSql
 			return "'" + str2 + "'";
 		}
 		inline string checkInt(int i) { return to_string(i); }
+		size_t searchInfoEntry(string &channel, vector<TVideoInfoEntry> &videoInfo);
+		void updateInfoTable(vector<TVideoInfoEntry> &videoInfoUpdate, vector<TVideoInfoEntry> &videoInfo);
 
 	public:
 		bool multiQuery;
@@ -87,7 +89,7 @@ class CSql
 		bool connectMysql();
 
 		string createVideoTableQuery(int count, bool startRow, bool replace, TVideoEntry* videoEntry);
-		string createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size);
+		string createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size, int diffMode);
 		bool executeSingleQueryString__(string query, const char* func, int line);
 		bool executeMultiQueryString__(string query, const char* func, int line);
 		bool createVideoDbFromTemplate(string name);

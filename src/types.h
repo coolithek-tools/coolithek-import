@@ -38,6 +38,7 @@ typedef struct VideoEntry
 
 typedef struct VideoInfoEntry
 {
+	int    id;
 	string channel;
 	int    count;
 	int    lastest;

@@ -937,7 +937,7 @@ bool CMV2Mysql::parseDB()
 		csql->setServerMultiStatementsOn();
 	}
 	videoInfo.push_back(videoInfoEntry);
-	string itq = csql->createInfoTableQuery(&videoInfo, movieEntries);
+	string itq = csql->createInfoTableQuery(&videoInfo, csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo), diffMode);
 	csql->executeMultiQueryString(itq);
 	csql->executeSingleQueryString("COMMIT;");
 	csql->executeSingleQueryString("SET autocommit = 1;");
@@ -991,7 +991,8 @@ size_t CMV2Mysql::insertNewEntries()
 	cout << msgHead() << "insert new entries...";
 	videoEntrySqlBuf.clear();
 	writeLen = 0;
-	int entryIdx = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
+//	int entryIdx = csql->getTableEntries(VIDEO_DB, g_settings.videoDb_TableVideo);
+	int entryIdx = csql->getLastIndex(VIDEO_DB, g_settings.videoDb_TableVideo);
 	writeStart = true;
 	size_t i = 0;
 	for (i = 0; i < videoEntriesNew.size(); i++) {
@@ -1051,6 +1052,7 @@ void myExit(int val)
 	}
 	sem_unlink(mySEMID);
 	/* exit program */
+	printCursorOn();
 	exit(val);
 }
 

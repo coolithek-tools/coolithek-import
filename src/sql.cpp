@@ -172,11 +172,62 @@ string CSql::createVideoTableQuery(int count, bool startRow, bool replace, TVide
 	return entry;
 }
 
-string CSql::createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size)
+size_t CSql::searchInfoEntry(string &channel, vector<TVideoInfoEntry> &videoInfo)
 {
+	for (size_t i = 0; i < videoInfo.size(); i++) {
+		if (channel == videoInfo[i].channel)
+			return i+1;
+	}
+	return 0;
+}
+
+void CSql::updateInfoTable(vector<TVideoInfoEntry> &videoInfoUpdate, vector<TVideoInfoEntry> &videoInfo)
+{
+	string entry = "SELECT * FROM " + INFO_TABLE + ";";
+	executeSingleQueryString(entry);
+	MYSQL_RES* result = mysql_store_result(mysqlCon);
+	MYSQL_ROW row;
+	while ((row = mysql_fetch_row(result))) {
+		TVideoInfoEntry vie;
+		vie.id      = atoi(row[0]);
+		vie.channel = static_cast<string>(row[1]);
+		vie.count   = atoi(row[2]);
+		vie.lastest = atoi(row[3]);
+		vie.oldest  = atoi(row[4]);
+		size_t idx  = searchInfoEntry(vie.channel, videoInfo);
+		if (idx > 0) {
+			idx        -= 1;
+			vie.count  += videoInfo[idx].count;
+			vie.lastest = max(vie.lastest, videoInfo[idx].lastest);
+			vie.oldest  = min(vie.oldest, videoInfo[idx].oldest);
+		}
+		videoInfoUpdate.push_back(vie);
+	}
+	mysql_free_result(result);
+}
+
+string CSql::createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size, int diffMode)
+{
+	vector<TVideoInfoEntry> videoInfoUpdate;
+	vector<TVideoInfoEntry> *videoInfoTmp;
 	string entry = "";
-	for (vector<TVideoInfoEntry>::iterator it = videoInfo->begin(); it != videoInfo->end(); ++it) {
-		entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
+	
+	if (diffMode > diffMode_none) {
+		updateInfoTable(videoInfoUpdate, *videoInfo);
+		videoInfoTmp = &videoInfoUpdate;
+	}
+	else {
+		videoInfoTmp = videoInfo;
+	}
+
+	for (vector<TVideoInfoEntry>::iterator it = videoInfoTmp->begin(); it != videoInfoTmp->end(); ++it) {
+		if (diffMode > diffMode_none) {
+			entry += "REPLACE INTO " + INFO_TABLE + " (id, channel, count, lastest, oldest) VALUES (";
+			entry += checkInt(it->id) + ", ";
+		}
+		else {
+			entry += "INSERT INTO " + INFO_TABLE + " (channel, count, lastest, oldest) VALUES (";
+		}
 		entry += checkString(it->channel, 256) + ", ";
 		entry += checkInt(it->count) + ", ";
 		entry += checkInt(it->lastest) + ", ";
@@ -184,8 +235,13 @@ string CSql::createInfoTableQuery(vector<TVideoInfoEntry> *videoInfo, int size)
 		entry += ");";
 	}
 	videoInfo->clear();
+	if (diffMode > diffMode_none) {
+		videoInfoUpdate.clear();
+	}
 
-	entry += "INSERT INTO " + VERSION_TABLE + " (version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
+	entry += (diffMode > diffMode_none) ? "REPLACE" : "INSERT";
+	entry += " INTO " + VERSION_TABLE + " (id, version, vdate, mvversion, mvdate, mventrys, progname, progversion) VALUES (";
+	entry += checkInt(1) + ", ";
 	string tmpStr = (string)g_dbVersion;
 	entry += checkString(tmpStr, 256) + ", ";
 	entry += checkInt(time(0)) + ", ";
