@@ -27,4 +27,127 @@ Das Programm wird üblicherweise über einen Cron Job zu festgelegten Zeiten ges
 * libpthread
 * libexpat
 
-Zum kompilieren des Programms werden auch die jeweiligen -devel Pakete sowie das rapidjson-devel Paket benötigt.
+Zum kompilieren des Programms werden auch die jeweiligen -devel Pakete sowie das [rapidjson](https://github.com/Tencent/rapidjson)-devel Paket benötigt.
+
+## Kommandozeilen-Optionen
+
+<style>
+.table1 {
+border: 0;
+}
+.td1a, .td1b, .td1c, .td1d {
+border: 0;
+padding: 4px;
+vertical-align: top;
+}
+.td1a {
+width: 2%;
+}
+.td1b {
+width: 5%;
+}
+.td1c {
+width: 20%;
+}
+</style>
+
+<table class="table1">
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">&nbsp;</td>
+<td class="td1c"><strong>Usage:</strong></td>
+<td class="td1d"><strong>mv2mariadb [OPTION]</strong></td>
+</tr>
+
+<tr>
+<td class="td1d" style="padding:0px;" colspan="4">&nbsp;</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-e</td>
+<td class="td1c">--epoch xxx</td>
+<td class="td1d">Use not older entrys than 'xxx' days (default all data)</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-f</td>
+<td class="td1c">--force-convert</td>
+<td class="td1d">Data also convert, when movie list is up-to-date</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-c</td>
+<td class="td1c">--cron-mode xxx</td>
+<td class="td1d">'xxx' = time in minutes. Specifies the period during which no new version check is performed after the last download</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-C</td>
+<td class="td1c">--cron-mode-echo</td>
+<td class="td1d">Output message during --cron-mode to the log (Default: no output)</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-D</td>
+<td class="td1c">--diff-mode</td>
+<td class="td1d">Use difference list instead of the complete movie list</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-n</td>
+<td class="td1c">--no-indexes</td>
+<td class="td1d">Don't create indexes for database</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">&nbsp;</td>
+<td class="td1c">--update</td>
+<td class="td1d">Create new config file and new template database, then exit</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">&nbsp;</td>
+<td class="td1c">--download-only</td>
+<td class="td1d">Download only (Don't convert to sql database)</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">&nbsp;</td>
+<td class="td1c">--load-serverlist</td>
+<td class="td1d">Load new serverlist and exit</td>
+</tr>
+
+<tr>
+<td class="td1d" colspan="4">&nbsp;</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-d</td>
+<td class="td1c">--debug-print</td>
+<td class="td1d">Print debug info</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-v</td>
+<td class="td1c">--version</td>
+<td class="td1d">Display versions info and exit</td>
+</tr>
+
+<tr>
+<td class="td1a">&nbsp;</td>
+<td class="td1b">-h</td>
+<td class="td1c">--help</td>
+<td class="td1d">Display the help screen and exit</td>
+</tr>
+</table>
