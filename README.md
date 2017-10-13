@@ -1,3 +1,4 @@
+<link type="text/css" rel="stylesheet" href="README.css" />
 # mv2mariadb
 ### Datenkonverter MediathekView Datenbank => Coolithek SQL
 #### Aktuelle Version: 0.4.1
@@ -30,27 +31,6 @@ Das Programm wird üblicherweise über einen Cron Job zu festgelegten Zeiten ges
 Zum kompilieren des Programms werden auch die jeweiligen -devel Pakete sowie das [rapidjson](https://github.com/Tencent/rapidjson)-devel Paket benötigt.
 
 ## Kommandozeilen-Optionen
-
-<style>
-.table1 {
-border: 0;
-}
-.td1a, .td1b, .td1c, .td1d {
-border: 0;
-padding: 4px;
-vertical-align: top;
-}
-.td1a {
-width: 2%;
-}
-.td1b {
-width: 5%;
-}
-.td1c {
-width: 20%;
-}
-</style>
-
 <table class="table1">
 <tr>
 <td class="td1a">&nbsp;</td>
