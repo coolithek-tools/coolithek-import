@@ -2,7 +2,6 @@
 ### Datenkonverter MediathekView Datenbank => Coolithek SQL
 #### Aktuelle Version: 0.4.1
 
-<br />
 mv2mariadb ist ein unter Linux lauffähiges Tool zum konvertieren der [MediathekView](https://mediathekview.de) Datenbank (Json Format) nach SQL (MariaDB). Die Daten werden für das [Coolithek Plugin](https://wiki.slknet.de/w/Coolithek) benötigt.
 Das Programm wird üblicherweise über einen Cron Job zu festgelegten Zeiten gestartet.
 
@@ -30,8 +29,6 @@ Das Programm wird üblicherweise über einen Cron Job zu festgelegten Zeiten ges
 Zum kompilieren des Programms werden auch die jeweiligen -devel Pakete sowie das [rapidjson](https://github.com/Tencent/rapidjson)-devel Paket benötigt.
 
 ## Kommandozeilen-Optionen
-
-<link type="text/css" rel="stylesheet" href="README.css" />
 
 <table class="table1">
 <tr>
@@ -133,3 +130,24 @@ Zum kompilieren des Programms werden auch die jeweiligen -devel Pakete sowie das
 <td class="td1d">Display the help screen and exit</td>
 </tr>
 </table>
+
+(setq markdown-xhtml-header-content
+"<style type='text/css'>
+.table1 {
+border: 0;
+}
+.td1a, .td1b, .td1c, .td1d {
+border: 0;
+padding: 4px;
+vertical-align: top;
+}
+.td1a {
+width: 2%;
+}
+.td1b {
+width: 5%;
+}
+.td1c {
+width: 20%;
+}
+</style>")
