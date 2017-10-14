@@ -140,7 +140,6 @@ CXXFLAGS	+= $(EXTRA_CXXFLAGS)
 LIBS		 =
 ifeq ($(ENABLE_SANITIZER), 1)
 LIBS		+= -lasan
-LIBS		+= -ltsan
 LIBS		+= -lubsan
 endif
 LIBS		+= -lmariadb
