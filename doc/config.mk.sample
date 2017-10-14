@@ -7,26 +7,43 @@ EXTRA_CXXFLAGS		= -DPRIV_USERAGENT
 EXTRA_LDFLAGS		= 
 EXTRA_INCLUDES		= 
 EXTRA_LIBS		= 
-
-USE_GCC			= 7
-
-ifeq ($(USE_GCC), 5)
-CXX			= g++-5
-LD			= g++-5
 STRIP			= strip
-STDC++			= -std=c++14
+
+#USE_COMPILER		= GCC
+USE_COMPILER		= CLANG
+
+ifeq ($(USE_COMPILER), CLANG)
+	COMPILER_VER	= clang50
+else
+	COMPILER_VER	= gcc7
 endif
 
-ifeq ($(USE_GCC), 6)
-CXX			= g++-6
-LD			= g++-6
-STRIP			= strip
-STDC++			= -std=c++14
+ifeq ($(COMPILER_VER), gcc5)
+	CXX		= g++-5
+	LD		= g++-5
+	STDC++		= -std=c++14
 endif
 
-ifeq ($(USE_GCC), 7)
-CXX			= g++-7
-LD			= g++-7
-STRIP			= strip
-STDC++			= -std=c++17
+ifeq ($(COMPILER_VER), gcc6)
+	CXX		= g++-6
+	LD		= g++-6
+	STDC++		= -std=c++14
+endif
+
+ifeq ($(COMPILER_VER), gcc7)
+	CXX		= g++-7
+	LD		= g++-7
+	STDC++		= -std=c++17
+endif
+
+ifeq ($(USE_COMPILER), CLANG)
+	CXX		= clang++
+	LD		= clang++
+#	LD		= clang++ -v
+ifeq ($(COMPILER_VER), clang38)
+	STDC++		= -std=c++14
+endif
+ifeq ($(COMPILER_VER), clang50)
+	STDC++		= -std=c++17
+endif
 endif

@@ -41,6 +41,14 @@ STDC++			?= -std=c++11
 
 ## --------------------------------
 
+ifeq ($(USE_COMPILER), CLANG)
+	COMPX		= CLANG++
+	LNKX		= CLANGLD
+else
+	COMPX		= CXX
+	LNKX		= CXXLD
+endif
+
 ifneq ($(DEBUG), 1)
 ENABLE_SANITIZER	 = 0
 endif
@@ -56,7 +64,9 @@ else
 CXXFLAGS	+= -O3
 endif
 CXXFLAGS	+= $(STDC++)
+ifneq ($(USE_COMPILER), CLANG)
 CXXFLAGS	+= -fmax-errors=10
+endif
 CXXFLAGS	+= -Wall
 CXXFLAGS	+= -Wextra
 CXXFLAGS	+= -Wshadow
@@ -84,19 +94,45 @@ CXXFLAGS	+= -Winit-self
 CXXFLAGS	+= -Wpedantic
 
 ifeq ($(ENABLE_SANITIZER), 1)
-## libasan
 CXXFLAGS	+= -fsanitize=address
 CXXFLAGS	+= -fsanitize=leak
-CXXFLAGS	+= -fsanitize=returns-nonnull-attribute
+CXXFLAGS	+= -fsanitize=bool
+CXXFLAGS	+= -fsanitize=bounds
 CXXFLAGS	+= -fsanitize=enum
-## libubsan
+CXXFLAGS	+= -fsanitize=nonnull-attribute
+CXXFLAGS	+= -fsanitize=return
+CXXFLAGS	+= -fsanitize=returns-nonnull-attribute
+CXXFLAGS	+= -fsanitize=shift
 CXXFLAGS	+= -fsanitize=unreachable
-CXXFLAGS	+= -fsanitize=undefined
+CXXFLAGS	+= -fsanitize=vla-bound
+CXXFLAGS	+= -fsanitize=vptr
+CXXFLAGS	+= -fsanitize=float-cast-overflow
+CXXFLAGS	+= -fsanitize=float-divide-by-zero
 CXXFLAGS	+= -fsanitize=integer-divide-by-zero
 CXXFLAGS	+= -fsanitize=signed-integer-overflow
-CXXFLAGS	+= -fsanitize=object-size
+
+ifeq ($(USE_COMPILER), CLANG)
+CXXFLAGS	+= -fsanitize=function
+CXXFLAGS	+= -fsanitize=nullability-arg
+CXXFLAGS	+= -fsanitize=nullability-assign
+CXXFLAGS	+= -fsanitize=nullability-return
+CXXFLAGS	+= -fsanitize=unsigned-integer-overflow
+## clang error: "undefined reference to __ubsan_handle_pointer_overflow"
+##CXXFLAGS	+= -fsanitize=pointer-overflow
+endif
+
+ifneq ($(USE_COMPILER), CLANG)
+## clang error: "undefined reference to __ubsan_handle_type_mismatch_v1"
+CXXFLAGS	+= -fsanitize=alignment
+## clang error: "undefined reference to __ubsan_handle_type_mismatch_v1"
+CXXFLAGS	+= -fsanitize=null
+endif
 
 CXXFLAGS	+= -DSANITIZER
+endif
+
+ifeq ($(USE_COMPILER), CLANG)
+CXXFLAGS	+= -DUSE_CLANG
 endif
 
 CXXFLAGS	+= $(EXTRA_CXXFLAGS)
@@ -104,6 +140,7 @@ CXXFLAGS	+= $(EXTRA_CXXFLAGS)
 LIBS		 =
 ifeq ($(ENABLE_SANITIZER), 1)
 LIBS		+= -lasan
+LIBS		+= -ltsan
 LIBS		+= -lubsan
 endif
 LIBS		+= -lmariadb
@@ -132,12 +169,12 @@ endif
 
 build/src/%.o: src/%.cpp
 	@if ! test -d $$(dirname $@); then mkdir -p $$(dirname $@); fi;
-	@if test "$(quiet)" = "@"; then echo "CXX $< => $@"; fi;
+	@if test "$(quiet)" = "@"; then echo "$(COMPX) $< => $@"; fi;
 	$(quiet)$(CXX) $(CXXFLAGS) -MT $@ -MD -MP -c -o $@ $<
 
 $(BUILD_DIR)/$(PROGNAME): $(PROG_OBJS)
 	@if ! test -d $$(dirname $@); then mkdir -p $$(dirname $@); fi;
-	@if test "$(quiet)" = "@"; then echo "CXXLD *.o => $@"; fi;
+	@if test "$(quiet)" = "@"; then echo "$(LNKX) *.o => $@"; fi;
 	$(quiet)$(LD) $(LDFLAGS) $(PROG_OBJS) -o $@
 
 install: all
